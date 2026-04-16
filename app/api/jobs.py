@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +45,13 @@ class JobResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class JobListResponse(BaseModel):
+    items: list[JobResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 def _to_response(job: Job, entity_count: int) -> JobResponse:
@@ -110,6 +117,38 @@ async def create_job(
 
     log.info("job_created", job_id=str(job.id), query=payload.query[:120])
     return _to_response(job, entity_count=0)
+
+
+@router.get("", response_model=JobListResponse)
+async def list_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    status: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> JobListResponse:
+    filters = [Job.status == status] if status else []
+
+    total = int(
+        (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
+    )
+
+    count_subq = (
+        select(func.count())
+        .select_from(Entity)
+        .where(Entity.job_id == Job.id)
+        .correlate(Job)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(Job, count_subq.label("entity_count"))
+        .where(*filters)
+        .order_by(Job.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    rows = (await session.execute(stmt)).all()
+    items = [_to_response(job, int(entity_count)) for job, entity_count in rows]
+    return JobListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/{job_id}", response_model=JobResponse)

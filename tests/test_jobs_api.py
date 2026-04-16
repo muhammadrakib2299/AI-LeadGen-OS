@@ -150,6 +150,74 @@ async def test_export_csv_for_completed_job(db_session: AsyncSession, override_s
 
 
 @pytest.mark.asyncio
+async def test_list_jobs_returns_newest_first_with_entity_counts(
+    db_session: AsyncSession, override_session
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    t_old = datetime.now(UTC) - timedelta(hours=1)
+    t_new = datetime.now(UTC)
+    older = Job(
+        query_raw="older",
+        limit=10,
+        budget_cap_usd=1.0,
+        status="succeeded",
+        created_at=t_old,
+        updated_at=t_old,
+    )
+    newer = Job(
+        query_raw="newer",
+        limit=10,
+        budget_cap_usd=1.0,
+        status="running",
+        created_at=t_new,
+        updated_at=t_new,
+    )
+    db_session.add(older)
+    db_session.add(newer)
+    await db_session.flush()
+    db_session.add(
+        Entity(
+            job_id=older.id,
+            name="X",
+            domain="x.example.com",
+            field_sources={},
+            external_ids={},
+        )
+    )
+    await db_session.flush()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/jobs?limit=10")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] >= 2
+    assert body["limit"] == 10
+    assert body["offset"] == 0
+    # Newest first. The first item we just inserted is `newer`.
+    ordered = [item["query_raw"] for item in body["items"]]
+    assert ordered.index("newer") < ordered.index("older")
+    for item in body["items"]:
+        if item["query_raw"] == "older":
+            assert item["entity_count"] == 1
+        if item["query_raw"] == "newer":
+            assert item["entity_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_filter_by_status(db_session: AsyncSession, override_session) -> None:
+    db_session.add(Job(query_raw="ok", limit=10, budget_cap_usd=1.0, status="succeeded"))
+    db_session.add(Job(query_raw="run", limit=10, budget_cap_usd=1.0, status="running"))
+    await db_session.flush()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/jobs?status=running")
+    body = resp.json()
+    assert all(item["status"] == "running" for item in body["items"])
+    assert body["total"] >= 1
+
+
+@pytest.mark.asyncio
 async def test_export_csv_rejected_while_running(
     db_session: AsyncSession, override_session
 ) -> None:
