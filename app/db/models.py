@@ -50,9 +50,7 @@ class Job(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "jobs"
 
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="pending", index=True
-    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
     query_raw: Mapped[str] = mapped_column(Text, nullable=False)
     query_validated: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     limit: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
@@ -94,19 +92,13 @@ class Entity(Base, UUIDPKMixin, TimestampMixin):
     socials: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     quality_score: Mapped[int | None] = mapped_column(Integer, index=True)
-    review_status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending"
-    )
+    review_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
 
     # Provenance: per-field {"email": {"source": "crawler", "fetched_at": "...", "confidence": 0.9}}
-    field_sources: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    field_sources: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     # External IDs across sources (e.g. {"google_place_id": "ChIJ...", "opencorporates_id": "..."})
-    external_ids: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    external_ids: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     job: Mapped[Job] = relationship(back_populates="entities")
 

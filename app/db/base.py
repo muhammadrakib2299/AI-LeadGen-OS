@@ -1,14 +1,12 @@
 """SQLAlchemy declarative base and common column helpers."""
 
+import uuid
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import MetaData, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-import uuid
-
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
