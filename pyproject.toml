@@ -70,6 +70,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S"]
 "alembic/versions/**" = ["E501", "W291", "N999"]
+"app/api/**" = ["B008"]  # FastAPI's Depends() default is the standard pattern
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

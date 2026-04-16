@@ -1,0 +1,146 @@
+"""Jobs API — submit, poll, export.
+
+Background execution uses asyncio.create_task for Phase 1 MVP. Phase 2
+replaces this with Celery / RQ workers for durability across restarts.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.logging import get_logger
+from app.db.models import Entity, Job
+from app.db.session import get_session, session_scope
+from app.services.export import entities_to_csv
+from app.services.runner_factory import make_production_runner
+
+log = get_logger(__name__)
+router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+class JobCreateRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=500)
+    limit: int = Field(default=100, ge=1, le=1000)
+    budget_cap_usd: float = Field(default=5.0, gt=0, le=100.0)
+
+
+class JobResponse(BaseModel):
+    id: UUID
+    status: str
+    query_raw: str
+    query_validated: dict[str, Any] | None
+    limit: int
+    budget_cap_usd: float
+    cost_usd: float
+    error: str | None
+    entity_count: int
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+def _to_response(job: Job, entity_count: int) -> JobResponse:
+    return JobResponse(
+        id=job.id,
+        status=job.status,
+        query_raw=job.query_raw,
+        query_validated=job.query_validated,
+        limit=job.limit,
+        budget_cap_usd=float(job.budget_cap_usd),
+        cost_usd=float(job.cost_usd),
+        error=job.error,
+        entity_count=entity_count,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+    )
+
+
+async def _count_entities(session: AsyncSession, job_id: UUID) -> int:
+    stmt = select(func.count()).select_from(Entity).where(Entity.job_id == job_id)
+    return int((await session.execute(stmt)).scalar_one())
+
+
+async def _run_in_background(job_id: UUID) -> None:
+    """Executed via asyncio.create_task — owns its own DB session + clients."""
+    try:
+        async with session_scope() as session:
+            job = await session.get(Job, job_id)
+            if job is None:
+                log.warning("job_background_not_found", job_id=str(job_id))
+                return
+            try:
+                runner, cleanup = await make_production_runner(session)
+            except RuntimeError as exc:
+                job.status = "failed"
+                job.error = str(exc)
+                return
+            try:
+                await runner.run(job)
+            finally:
+                await cleanup()
+    except Exception:
+        log.exception("job_background_crashed", job_id=str(job_id))
+
+
+@router.post("", response_model=JobResponse, status_code=201)
+async def create_job(
+    payload: JobCreateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> JobResponse:
+    job = Job(
+        query_raw=payload.query,
+        limit=payload.limit,
+        budget_cap_usd=payload.budget_cap_usd,
+        status="pending",
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+
+    asyncio.create_task(_run_in_background(job.id))
+
+    log.info("job_created", job_id=str(job.id), query=payload.query[:120])
+    return _to_response(job, entity_count=0)
+
+
+@router.get("/{job_id}", response_model=JobResponse)
+async def get_job(
+    job_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> JobResponse:
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return _to_response(job, entity_count=await _count_entities(session, job.id))
+
+
+@router.get("/{job_id}/export.csv")
+async def export_job_csv(
+    job_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    if job.status in {"pending", "running"}:
+        raise HTTPException(status_code=409, detail=f"job is {job.status}; not yet exportable")
+
+    entities = (
+        (await session.execute(select(Entity).where(Entity.job_id == job.id))).scalars().all()
+    )
+    csv_body = entities_to_csv(entities)
+    filename = f"leadgen-{job.id}.csv"
+    return Response(
+        content=csv_body,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

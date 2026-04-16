@@ -9,7 +9,6 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
-    async_sessionmaker,
     create_async_engine,
 )
 
@@ -23,31 +22,35 @@ def anyio_backend() -> str:
 
 @pytest_asyncio.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
-    """Async session for integration tests.
+    """Async session wrapped in an outer transaction that is rolled back at end.
 
-    Creates a fresh engine per test (pytest-asyncio uses function-scoped event
-    loops by default, so a module-level cached engine bound to a prior loop
-    breaks). The test's writes are rolled back on teardown.
+    Uses `join_transaction_mode="create_savepoint"` so `session.commit()` calls
+    inside application code become savepoint releases rather than real commits,
+    letting the outer rollback wipe everything the test (or HTTP handler) wrote.
 
     Skips the test if Postgres is unreachable.
     """
     engine = create_async_engine(
         get_settings().database_url,
         pool_pre_ping=True,
-        poolclass=None,  # NullPool via default for async; keep pool simple
     )
     try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        async with engine.connect() as probe:
+            await probe.execute(text("SELECT 1"))
     except Exception as exc:
         await engine.dispose()
         pytest.skip(f"Postgres not reachable for integration test: {exc}")
 
-    sessionmaker = async_sessionmaker(bind=engine, expire_on_commit=False)
-    async with sessionmaker() as session:
+    async with engine.connect() as conn:
+        outer = await conn.begin()
+        session = AsyncSession(
+            bind=conn,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
         try:
             yield session
         finally:
-            await session.rollback()
             await session.close()
+            await outer.rollback()
     await engine.dispose()
