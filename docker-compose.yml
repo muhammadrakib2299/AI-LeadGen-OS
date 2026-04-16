@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: leadgen
       POSTGRES_DB: leadgen
     ports:
-      - "5432:5432"
+      - "5433:5432"  # host 5433 -> container 5432, avoids clash with native Windows postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro

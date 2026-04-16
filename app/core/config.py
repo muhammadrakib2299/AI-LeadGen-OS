@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
     database_url: str = Field(
-        default="postgresql+asyncpg://leadgen:leadgen@localhost:5432/leadgen",
+        default="postgresql+asyncpg://leadgen:leadgen@localhost:5433/leadgen",
         description="Async SQLAlchemy DSN for Postgres 16.",
     )
     redis_url: str = "redis://localhost:6379/0"

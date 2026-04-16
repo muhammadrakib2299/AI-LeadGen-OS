@@ -44,7 +44,7 @@ Both have FastAPI/Python SDKs and inject secrets as env vars at runtime.
 docker compose up -d
 ```
 
-Brings up Postgres 16 (port 5432) and Redis 7 (port 6379). Data persists in named volumes.
+Brings up Postgres 16 (host port **5433**, container 5432) and Redis 7 (port 6379). Data persists in named volumes. Port 5433 avoids clash with a native Postgres install on Windows.
 
 Check health:
 
