@@ -1,0 +1,273 @@
+"""End-to-end Phase 1 pipeline: validate -> Places -> crawl -> extract -> persist.
+
+Runs inline (no Celery yet) — Phase 2 wraps this with BullMQ-equivalent workers.
+Keeps all dependencies injected so tests can swap in fakes without touching real APIs.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+from urllib.parse import urlparse
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.logging import get_logger
+from app.db.models import Entity, Job
+from app.extractors.contacts import ContactsExtractor
+from app.models.contacts import ExtractedContacts
+from app.models.places import Place
+from app.models.query import QueryRequest, QueryValidationError, ValidatedQuery
+from app.services.blacklist import is_blacklisted
+from app.services.crawler import Crawler
+from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
+from app.services.query_validator import QueryValidator
+
+log = get_logger(__name__)
+
+
+class BudgetExceededError(Exception):
+    pass
+
+
+class JobRunner:
+    def __init__(
+        self,
+        *,
+        validator: QueryValidator,
+        places: PlacesClient,
+        crawler: Crawler,
+        extractor: ContactsExtractor,
+        session: AsyncSession,
+    ) -> None:
+        self._validator = validator
+        self._places = places
+        self._crawler = crawler
+        self._extractor = extractor
+        self._session = session
+
+    async def run(self, job: Job) -> Job:
+        job.status = "running"
+        job.started_at = _now()
+        await self._session.flush()
+
+        try:
+            validated = await self._validate(job)
+            if validated is None:
+                return job
+
+            cost_tracker = _CostTracker(cap=float(job.budget_cap_usd))
+
+            try:
+                places = await self._discover(job, validated, cost_tracker)
+            except BudgetExceededError:
+                log.warning("job_budget_exceeded_on_discovery", job_id=str(job.id))
+                job.status = "budget_exceeded"
+                job.error = f"Budget of ${job.budget_cap_usd} exceeded during discovery."
+                return job
+
+            for place in places:
+                try:
+                    await self._process_place(job, validated, place, cost_tracker)
+                except BudgetExceededError:
+                    log.warning("job_budget_exceeded", job_id=str(job.id))
+                    job.status = "budget_exceeded"
+                    job.error = f"Budget of ${job.budget_cap_usd} exceeded."
+                    break
+                except Exception as exc:
+                    # Never let one bad entity kill the whole job — log and move on.
+                    log.warning(
+                        "job_entity_failed",
+                        job_id=str(job.id),
+                        place_id=place.id,
+                        error=str(exc),
+                    )
+
+            if job.status == "running":
+                job.status = "succeeded"
+
+        except Exception as exc:
+            log.exception("job_failed", job_id=str(job.id))
+            job.status = "failed"
+            job.error = str(exc)
+        finally:
+            job.finished_at = _now()
+            await self._session.flush()
+
+        return job
+
+    async def _validate(self, job: Job) -> ValidatedQuery | None:
+        validated = await self._validator.validate(
+            QueryRequest(query=job.query_raw, limit=job.limit)
+        )
+        if isinstance(validated, QueryValidationError):
+            job.status = "rejected"
+            job.error = validated.reason
+            job.query_validated = {
+                "status": "rejected",
+                "reason": validated.reason,
+                "suggestions": validated.suggestions,
+            }
+            return None
+        job.query_validated = validated.model_dump()
+        return validated
+
+    async def _discover(
+        self,
+        job: Job,
+        validated: ValidatedQuery,
+        cost: _CostTracker,
+    ) -> list[Place]:
+        query_string = _query_string_for_places(validated)
+        places = await self._places.text_search(
+            query_string,
+            region_code=validated.country,
+            max_results=validated.limit,
+            job_id=job.id,
+        )
+        cost.add(TEXT_SEARCH_COST_USD)
+        job.cost_usd = cost.total  # type: ignore[assignment]
+        if cost.over_cap:
+            raise BudgetExceededError
+        return places
+
+    async def _process_place(
+        self,
+        job: Job,
+        validated: ValidatedQuery,
+        place: Place,
+        cost: _CostTracker,
+    ) -> None:
+        domain = _domain_of(place.website_uri)
+
+        if await is_blacklisted(self._session, domain=domain):
+            log.info("job_place_skipped_blacklisted", job_id=str(job.id), domain=domain)
+            return
+
+        contacts = await self._extract_contacts(job, place)
+
+        primary_email = contacts.emails[0] if contacts.emails else None
+        if primary_email and await is_blacklisted(self._session, email=primary_email):
+            log.info("job_place_skipped_blacklisted_email", job_id=str(job.id), email=primary_email)
+            return
+
+        entity = _build_entity(
+            job_id=job.id,
+            place=place,
+            contacts=contacts,
+            validated=validated,
+        )
+        self._session.add(entity)
+        await self._session.flush()
+        job.cost_usd = cost.total  # type: ignore[assignment]
+
+    async def _extract_contacts(self, job: Job, place: Place) -> ExtractedContacts:
+        if not place.website_uri:
+            return ExtractedContacts()
+        pages = await self._crawler.crawl_entity_site(place.website_uri, job_id=job.id)
+        return await self._extractor.extract(pages)
+
+
+class _CostTracker:
+    def __init__(self, cap: float) -> None:
+        self._cap = cap
+        self._total = 0.0
+
+    def add(self, amount: float) -> None:
+        self._total += amount
+
+    @property
+    def total(self) -> float:
+        return round(self._total, 6)
+
+    @property
+    def over_cap(self) -> bool:
+        return self._total > self._cap
+
+
+def _query_string_for_places(q: ValidatedQuery) -> str:
+    parts: list[str] = [q.entity_type]
+    parts.extend(q.keywords)
+    location_bits: list[str] = []
+    if q.city:
+        location_bits.append(q.city)
+    if q.region and q.region != q.city:
+        location_bits.append(q.region)
+    if location_bits:
+        parts.append("in " + ", ".join(location_bits))
+    return " ".join(p for p in parts if p).strip()
+
+
+def _domain_of(url: str | None) -> str | None:
+    if not url:
+        return None
+    try:
+        host = urlparse(url).netloc.lower()
+    except ValueError:
+        return None
+    if not host:
+        return None
+    return host.removeprefix("www.")
+
+
+def _build_entity(
+    *,
+    job_id: Any,
+    place: Place,
+    contacts: ExtractedContacts,
+    validated: ValidatedQuery,
+) -> Entity:
+    now_iso = _now().isoformat()
+    domain = _domain_of(place.website_uri)
+    email = contacts.emails[0] if contacts.emails else None
+    phone = contacts.phones[0] if contacts.phones else place.national_phone_number
+
+    field_sources: dict[str, Any] = {
+        "name": {"source": "google_places", "fetched_at": now_iso, "confidence": 0.98},
+    }
+    if place.formatted_address:
+        field_sources["address"] = {
+            "source": "google_places",
+            "fetched_at": now_iso,
+            "confidence": 0.95,
+        }
+    if place.website_uri:
+        field_sources["website"] = {
+            "source": "google_places",
+            "fetched_at": now_iso,
+            "confidence": 0.99,
+        }
+    if email:
+        field_sources["email"] = {
+            "source": "llm_extractor" if contacts.used_llm else "crawler",
+            "fetched_at": now_iso,
+            "confidence": 0.75 if contacts.used_llm else 0.90,
+        }
+    if phone:
+        field_sources["phone"] = {
+            "source": "crawler" if phone in contacts.phones else "google_places",
+            "fetched_at": now_iso,
+            "confidence": 0.90,
+        }
+
+    socials_payload = {s.platform: s.url for s in contacts.socials} if contacts.socials else None
+
+    return Entity(
+        job_id=job_id,
+        name=place.name or "(unnamed)",
+        domain=domain,
+        website=place.website_uri,
+        email=email,
+        phone=phone,
+        address=place.formatted_address,
+        city=place.city() or validated.city,
+        country=(place.country_code() or validated.country),
+        category=place.primary_type,
+        socials=socials_payload,
+        field_sources=field_sources,
+        external_ids={"google_place_id": place.id},
+    )
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
