@@ -18,10 +18,10 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
     database_url: str = Field(
-        default="postgresql+asyncpg://leadgen:leadgen@localhost:5433/leadgen",
+        default="postgresql+asyncpg://leadgen:leadgen@127.0.0.1:55432/leadgen",
         description="Async SQLAlchemy DSN for Postgres 16.",
     )
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://127.0.0.1:6380/0"
 
     google_places_api_key: str | None = None
     anthropic_api_key: str | None = None

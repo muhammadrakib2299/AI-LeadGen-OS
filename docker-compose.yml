@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: leadgen
       POSTGRES_DB: leadgen
     ports:
-      - "5433:5432"  # host 5433 -> container 5432, avoids clash with native Windows postgres
+      - "55432:5432"  # host 55432 -> container 5432, avoids clashes with native postgres and other projects
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "6380:6379"  # host 6380 -> container 6379, avoids other local Redis
     volumes:
       - redis_data:/data
     healthcheck:

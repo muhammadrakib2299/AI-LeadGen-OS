@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import __version__
-from app.api import health, jobs, privacy
+from app.api import health, jobs, privacy, review
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.sentry import configure_sentry
@@ -38,3 +38,4 @@ app = FastAPI(
 app.include_router(health.router)
 app.include_router(privacy.router)
 app.include_router(jobs.router)
+app.include_router(review.router)

@@ -152,6 +152,7 @@ async def get_job(
 @router.get("/{job_id}/export.csv")
 async def export_job_csv(
     job_id: UUID,
+    include_rejected: bool = Query(default=False),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     job = await session.get(Job, job_id)
@@ -160,9 +161,10 @@ async def export_job_csv(
     if job.status in {"pending", "running"}:
         raise HTTPException(status_code=409, detail=f"job is {job.status}; not yet exportable")
 
-    entities = (
-        (await session.execute(select(Entity).where(Entity.job_id == job.id))).scalars().all()
-    )
+    stmt = select(Entity).where(Entity.job_id == job.id)
+    if not include_rejected:
+        stmt = stmt.where(Entity.review_status != "rejected")
+    entities = (await session.execute(stmt)).scalars().all()
     csv_body = entities_to_csv(entities)
     filename = f"leadgen-{job.id}.csv"
     return Response(
