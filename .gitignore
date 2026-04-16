@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# uv
+.uv/
+uv.lock
+
+# Env + secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Logs
+*.log
+logs/
+
+# Local data
+data/
+exports/
+*.csv
+*.xlsx
+!tests/fixtures/**/*.csv
+
+# Docker volumes
+.postgres-data/
+.redis-data/
+
+# Alembic (keep migrations, ignore generated stuff)
+*.db
+*.sqlite
+
+# Playwright
+test-results/
+playwright-report/
