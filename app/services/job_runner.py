@@ -21,6 +21,7 @@ from app.models.query import QueryRequest, QueryValidationError, ValidatedQuery
 from app.services.blacklist import is_blacklisted
 from app.services.crawler import Crawler
 from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
+from app.services.quality import review_status_for, score_entity
 from app.services.query_validator import QueryValidator
 
 log = get_logger(__name__)
@@ -252,6 +253,21 @@ def _build_entity(
 
     socials_payload = {s.platform: s.url for s in contacts.socials} if contacts.socials else None
 
+    city = place.city() or validated.city
+    country = place.country_code() or validated.country
+    address = place.formatted_address
+
+    values = {
+        "name": place.name or None,
+        "website": place.website_uri,
+        "email": email,
+        "phone": phone,
+        "address": address,
+        "city": city,
+        "country": country,
+    }
+    quality_score = score_entity(values=values, field_sources=field_sources)
+
     return Entity(
         job_id=job_id,
         name=place.name or "(unnamed)",
@@ -259,11 +275,13 @@ def _build_entity(
         website=place.website_uri,
         email=email,
         phone=phone,
-        address=place.formatted_address,
-        city=place.city() or validated.city,
-        country=(place.country_code() or validated.country),
+        address=address,
+        city=city,
+        country=country,
         category=place.primary_type,
         socials=socials_payload,
+        quality_score=quality_score,
+        review_status=review_status_for(quality_score),
         field_sources=field_sources,
         external_ids={"google_place_id": place.id},
     )

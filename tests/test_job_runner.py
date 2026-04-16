@@ -114,6 +114,9 @@ async def test_job_runner_happy_path_discovers_crawls_extracts_persists(db_sessi
     assert ent.field_sources["email"]["source"] == "crawler"
     assert ent.field_sources["website"]["source"] == "google_places"
     assert ent.socials and "linkedin" in ent.socials
+    # All fields present + high source trust + fresh → high score, approved.
+    assert ent.quality_score is not None and ent.quality_score >= 90
+    assert ent.review_status == "approved"
 
 
 @pytest.mark.asyncio
