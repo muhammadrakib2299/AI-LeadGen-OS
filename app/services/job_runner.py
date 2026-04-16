@@ -20,6 +20,7 @@ from app.models.places import Place
 from app.models.query import QueryRequest, QueryValidationError, ValidatedQuery
 from app.services.blacklist import is_blacklisted
 from app.services.crawler import Crawler
+from app.services.email_verify import EmailVerification, verify_email
 from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
 from app.services.quality import review_status_for, score_entity
 from app.services.query_validator import QueryValidator
@@ -40,12 +41,14 @@ class JobRunner:
         crawler: Crawler,
         extractor: ContactsExtractor,
         session: AsyncSession,
+        verify_emails: bool = True,
     ) -> None:
         self._validator = validator
         self._places = places
         self._crawler = crawler
         self._extractor = extractor
         self._session = session
+        self._verify_emails = verify_emails
 
     async def run(self, job: Job) -> Job:
         job.status = "running"
@@ -152,11 +155,19 @@ class JobRunner:
             log.info("job_place_skipped_blacklisted_email", job_id=str(job.id), email=primary_email)
             return
 
+        email_verification: EmailVerification | None = None
+        if self._verify_emails and primary_email:
+            try:
+                email_verification = await verify_email(primary_email)
+            except Exception as exc:  # DNS hiccups must never kill a job.
+                log.warning("email_verify_failed", email=primary_email, error=str(exc))
+
         entity = _build_entity(
             job_id=job.id,
             place=place,
             contacts=contacts,
             validated=validated,
+            email_verification=email_verification,
         )
         self._session.add(entity)
         await self._session.flush()
@@ -217,10 +228,18 @@ def _build_entity(
     place: Place,
     contacts: ExtractedContacts,
     validated: ValidatedQuery,
+    email_verification: EmailVerification | None = None,
 ) -> Entity:
     now_iso = _now().isoformat()
     domain = _domain_of(place.website_uri)
-    email = contacts.emails[0] if contacts.emails else None
+
+    # If verification says the syntax is broken, treat as no email.
+    if email_verification is not None and email_verification.status == "invalid_syntax":
+        valid_emails = contacts.emails[1:] if len(contacts.emails) > 1 else []
+    else:
+        valid_emails = contacts.emails
+
+    email = valid_emails[0] if valid_emails else None
     phone = contacts.phones[0] if contacts.phones else place.national_phone_number
 
     field_sources: dict[str, Any] = {
@@ -239,11 +258,19 @@ def _build_entity(
             "confidence": 0.99,
         }
     if email:
-        field_sources["email"] = {
+        base_conf = 0.75 if contacts.used_llm else 0.90
+        boost = email_verification.confidence_boost if email_verification else 1.0
+        entry: dict[str, Any] = {
             "source": "llm_extractor" if contacts.used_llm else "crawler",
             "fetched_at": now_iso,
-            "confidence": 0.75 if contacts.used_llm else 0.90,
+            "confidence": round(max(0.0, min(1.0, base_conf * boost)), 3),
         }
+        if email_verification is not None:
+            entry["verification"] = {
+                "status": email_verification.status,
+                "mx_host": email_verification.mx_host,
+            }
+        field_sources["email"] = entry
     if phone:
         field_sources["phone"] = {
             "source": "crawler" if phone in contacts.phones else "google_places",
