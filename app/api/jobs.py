@@ -6,7 +6,6 @@ replaces this with Celery / RQ workers for durability across restarts.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -18,9 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.models import Entity, Job
-from app.db.session import get_session, session_scope
+from app.db.session import get_session
 from app.services.export import entities_to_csv
-from app.services.runner_factory import make_production_runner
+from app.services.queue import get_redis_pool
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -77,25 +76,13 @@ async def _count_entities(session: AsyncSession, job_id: UUID) -> int:
 
 
 async def _run_in_background(job_id: UUID) -> None:
-    """Executed via asyncio.create_task — owns its own DB session + clients."""
-    try:
-        async with session_scope() as session:
-            job = await session.get(Job, job_id)
-            if job is None:
-                log.warning("job_background_not_found", job_id=str(job_id))
-                return
-            try:
-                runner, cleanup = await make_production_runner(session)
-            except RuntimeError as exc:
-                job.status = "failed"
-                job.error = str(exc)
-                return
-            try:
-                await runner.run(job)
-            finally:
-                await cleanup()
-    except Exception:
-        log.exception("job_background_crashed", job_id=str(job_id))
+    """Enqueue the job to arq. A separate worker process runs the pipeline.
+
+    Tests monkey-patch this function to keep runs in-process.
+    """
+    pool = await get_redis_pool()
+    await pool.enqueue_job("run_job", str(job_id))
+    log.info("job_enqueued", job_id=str(job_id))
 
 
 @router.post("", response_model=JobResponse, status_code=201)
@@ -113,7 +100,7 @@ async def create_job(
     await session.commit()
     await session.refresh(job)
 
-    asyncio.create_task(_run_in_background(job.id))
+    await _run_in_background(job.id)
 
     log.info("job_created", job_id=str(job.id), query=payload.query[:120])
     return _to_response(job, entity_count=0)

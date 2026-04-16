@@ -58,6 +58,16 @@ docker compose ps
 uv run uvicorn app.main:app --reload
 ```
 
+### 4b. Run the arq worker (Phase 2+)
+
+Jobs submitted via `POST /jobs` are enqueued to Redis; a separate worker process executes them. Start it in another terminal:
+
+```bash
+uv run arq app.workers.worker.WorkerSettings
+```
+
+Concurrency defaults to 5 jobs in parallel per worker (`max_jobs` in `WorkerSettings`).
+
 Visit:
 - <http://localhost:8000/health>
 - <http://localhost:8000/docs> (Swagger UI)

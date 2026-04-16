@@ -24,6 +24,7 @@ dependencies = [
     "structlog>=24.4",
     "sentry-sdk[fastapi]>=2.18",
     "anthropic>=0.40",
+    "arq>=0.26",
     "playwright>=1.48",
     "selectolax>=0.3.27",
     "email-validator>=2.2",
