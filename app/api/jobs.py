@@ -163,7 +163,7 @@ async def export_job_csv(
 
     stmt = select(Entity).where(Entity.job_id == job.id)
     if not include_rejected:
-        stmt = stmt.where(Entity.review_status != "rejected")
+        stmt = stmt.where(Entity.review_status.not_in(("rejected", "duplicate")))
     entities = (await session.execute(stmt)).scalars().all()
     csv_body = entities_to_csv(entities)
     filename = f"leadgen-{job.id}.csv"

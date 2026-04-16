@@ -94,6 +94,15 @@ class Entity(Base, UUIDPKMixin, TimestampMixin):
     quality_score: Mapped[int | None] = mapped_column(Integer, index=True)
     review_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
 
+    # When this row is a fuzzy-match duplicate of another entity, points at the
+    # winner. Null for kept / standalone rows. See app/services/dedupe.py.
+    duplicate_of: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Provenance: per-field {"email": {"source": "crawler", "fetched_at": "...", "confidence": 0.9}}
     field_sources: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 

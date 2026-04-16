@@ -20,6 +20,7 @@ from app.models.places import Place
 from app.models.query import QueryRequest, QueryValidationError, ValidatedQuery
 from app.services.blacklist import is_blacklisted
 from app.services.crawler import Crawler
+from app.services.dedupe import dedupe_job
 from app.services.email_verify import EmailVerification, verify_email
 from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
 from app.services.quality import review_status_for, score_entity
@@ -88,6 +89,13 @@ class JobRunner:
                     )
 
             if job.status == "running":
+                try:
+                    merged = await dedupe_job(self._session, job.id)
+                    if merged:
+                        log.info("job_dedupe_done", job_id=str(job.id), merged=merged)
+                except Exception as exc:
+                    # Dedupe is best-effort; never fail a job over it.
+                    log.warning("job_dedupe_failed", job_id=str(job.id), error=str(exc))
                 job.status = "succeeded"
 
         except Exception as exc:
