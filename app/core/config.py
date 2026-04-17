@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     per_domain_min_interval_seconds: float = 2.0
     job_budget_cap_usd: float = 5.0
 
+    # Origins permitted to hit the API in a browser. Local Next.js dev by
+    # default; add the deployed dashboard origin before going to prod.
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+    )
+
     jurisdiction: Literal["EU", "UK", "US"] = "EU"
 
 
