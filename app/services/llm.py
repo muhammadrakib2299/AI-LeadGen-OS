@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol, runtime_checkable
 
-from anthropic import AsyncAnthropic
+from anthropic import APIError, AsyncAnthropic
 
+from app.core.circuit import CircuitBreaker
 from app.core.config import get_settings
 from app.core.logging import get_logger
 
@@ -35,14 +36,25 @@ class LLMClient(Protocol):
         ...
 
 
+_ANTHROPIC_BREAKER = CircuitBreaker(
+    name="anthropic",
+    failure_threshold=5,
+    cooldown_s=60.0,
+    expected_exceptions=(APIError,),
+)
+
+
 class AnthropicClient:
     """Production LLM client. Do not instantiate in tests."""
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self, api_key: str | None = None, breaker: CircuitBreaker | None = None
+    ) -> None:
         key = api_key or get_settings().anthropic_api_key
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY is not set. Real LLM calls are disabled.")
         self._client = AsyncAnthropic(api_key=key)
+        self._breaker = breaker or _ANTHROPIC_BREAKER
 
     async def complete_json(
         self,
@@ -52,12 +64,15 @@ class AnthropicClient:
         model: str = DEFAULT_MODEL,
         max_tokens: int = 1024,
     ) -> dict[str, Any]:
-        resp = await self._client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
+        async def _do_call() -> Any:
+            return await self._client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+
+        resp = await self._breaker.call(_do_call)
         text = "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
         try:
             return json.loads(_extract_json(text))

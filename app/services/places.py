@@ -22,6 +22,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.circuit import CircuitBreaker
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.models import RawFetch
@@ -56,18 +57,28 @@ TEXT_SEARCH_FIELDS = ",".join(
 )
 
 
+_PLACES_BREAKER = CircuitBreaker(
+    name="google_places",
+    failure_threshold=5,
+    cooldown_s=60.0,
+    expected_exceptions=(httpx.HTTPError, httpx.HTTPStatusError),
+)
+
+
 class PlacesClient:
     def __init__(
         self,
         http: httpx.AsyncClient | None = None,
         api_key: str | None = None,
         session: AsyncSession | None = None,
+        breaker: CircuitBreaker | None = None,
     ) -> None:
         settings = get_settings()
         self._api_key = api_key if api_key is not None else settings.google_places_api_key
         self._http = http or httpx.AsyncClient(timeout=20.0)
         self._session = session
         self._owns_http = http is None
+        self._breaker = breaker or _PLACES_BREAKER
 
     async def __aenter__(self) -> PlacesClient:
         return self
@@ -113,8 +124,29 @@ class PlacesClient:
             "X-Goog-FieldMask": TEXT_SEARCH_FIELDS,
         }
 
+        async def _do_post() -> httpx.Response:
+            response = await self._http.post(url, headers=headers, json=body)
+            response.raise_for_status()
+            return response
+
         started = time.monotonic()
-        response = await self._http.post(url, headers=headers, json=body)
+        try:
+            response = await self._breaker.call(_do_post)
+        except httpx.HTTPStatusError as exc:
+            response = exc.response
+            duration_ms = int((time.monotonic() - started) * 1000)
+            await self._record_fetch(
+                url=url,
+                method="POST",
+                response_status=response.status_code,
+                bytes_fetched=len(response.content),
+                duration_ms=duration_ms,
+                content_hash=content_hash,
+                payload=_try_json(response),
+                cost_usd=TEXT_SEARCH_COST_USD,
+                job_id=job_id,
+            )
+            raise
         duration_ms = int((time.monotonic() - started) * 1000)
 
         payload = _try_json(response)
@@ -129,8 +161,6 @@ class PlacesClient:
             cost_usd=TEXT_SEARCH_COST_USD,
             job_id=job_id,
         )
-
-        response.raise_for_status()
         return _parse_places(payload or {})
 
     async def _cache_lookup(self, content_hash: str) -> dict[str, Any] | None:

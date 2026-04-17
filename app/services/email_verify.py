@@ -12,12 +12,14 @@ services and should only fire for top-value leads.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import dns.asyncresolver
 import dns.exception
 import dns.resolver
 from email_validator import EmailNotValidError, validate_email
+
+from app.core.circuit import CircuitBreaker, CircuitOpenError
 
 VerificationStatus = Literal[
     "valid",
@@ -25,6 +27,14 @@ VerificationStatus = Literal[
     "no_mx",
     "unreachable",
 ]
+
+
+_DNS_BREAKER = CircuitBreaker(
+    name="dns_mx",
+    failure_threshold=10,  # DNS is flakier; tolerate more before opening
+    cooldown_s=30.0,
+    expected_exceptions=(dns.exception.Timeout, dns.resolver.NoNameservers),
+)
 
 
 @dataclass(slots=True)
@@ -53,8 +63,14 @@ async def verify_email(email: str, *, dns_timeout_s: float = 5.0) -> EmailVerifi
         return EmailVerification(email=email, status="invalid_syntax", reason=str(exc))
 
     domain = normalized.split("@", 1)[1]
+
+    async def _resolve_mx() -> list[Any]:
+        return await dns.asyncresolver.resolve(domain, "MX", lifetime=dns_timeout_s)
+
     try:
-        answers = await dns.asyncresolver.resolve(domain, "MX", lifetime=dns_timeout_s)
+        answers = await _DNS_BREAKER.call(_resolve_mx)
+    except CircuitOpenError as exc:
+        return EmailVerification(email=normalized, status="unreachable", reason=str(exc))
     except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN) as exc:
         return EmailVerification(email=normalized, status="no_mx", reason=type(exc).__name__)
     except dns.exception.Timeout:
