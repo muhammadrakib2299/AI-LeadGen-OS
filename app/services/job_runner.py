@@ -21,9 +21,10 @@ from app.models.query import QueryRequest, QueryValidationError, ValidatedQuery
 from app.services.blacklist import is_blacklisted
 from app.services.crawler import Crawler, CrawlResult
 from app.services.dedupe import dedupe_job
+from app.services.discovery import AllAdaptersDownError, PlacesAdapter, SmartRouter
 from app.services.email_verify import EmailVerification, verify_email
 from app.services.phone_verify import PhoneVerification, verify_phone
-from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
+from app.services.places import PlacesClient
 from app.services.quality import review_status_for, score_entity
 from app.services.query_validator import QueryValidator
 from app.services.url_liveness import UrlLiveness, liveness_from_crawl
@@ -40,14 +41,22 @@ class JobRunner:
         self,
         *,
         validator: QueryValidator,
-        places: PlacesClient,
+        places: PlacesClient | None = None,
+        router: SmartRouter | None = None,
         crawler: Crawler,
         extractor: ContactsExtractor,
         session: AsyncSession,
         verify_emails: bool = True,
     ) -> None:
+        # Back-compat: if caller passes only `places=`, build a single-adapter
+        # router around it. New callers should pass `router=` directly once
+        # they want to compose multiple discovery sources.
+        if router is None:
+            if places is None:
+                raise TypeError("JobRunner requires either `router=` or `places=`")
+            router = SmartRouter([PlacesAdapter(places)])
         self._validator = validator
-        self._places = places
+        self._router = router
         self._crawler = crawler
         self._extractor = extractor
         self._session = session
@@ -146,13 +155,17 @@ class JobRunner:
         cost: _CostTracker,
     ) -> list[Place]:
         query_string = _query_string_for_places(validated)
-        places = await self._places.text_search(
-            query_string,
-            region_code=validated.country,
-            max_results=validated.limit,
-            job_id=job.id,
-        )
-        cost.add(TEXT_SEARCH_COST_USD)
+        try:
+            places, spent = await self._router.search(
+                query_string,
+                region_code=validated.country,
+                max_results=validated.limit,
+                job_id=job.id,
+            )
+        except AllAdaptersDownError as exc:
+            log.error("job_discovery_all_adapters_down", job_id=str(job.id), error=str(exc))
+            raise
+        cost.add(spent)
         job.cost_usd = cost.total  # type: ignore[assignment]
         job.places_discovered = len(places)
         await self._session.flush()
