@@ -228,3 +228,79 @@ async def test_export_csv_rejected_while_running(
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(f"/jobs/{job.id}/export.csv")
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_with_idempotency_key_creates_once(
+    db_session: AsyncSession, override_session
+) -> None:
+    payload = {
+        "query": "restaurants in Paris",
+        "limit": 10,
+        "budget_cap_usd": 2.0,
+        "idempotency_key": "client-run-2026-04-17-a",
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/jobs", json=payload)
+        second = await client.post("/jobs", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
+
+    # Only one row in the DB with this key.
+    from sqlalchemy import func, select
+
+    count = int(
+        (
+            await db_session.execute(
+                select(func.count())
+                .select_from(Job)
+                .where(Job.idempotency_key == payload["idempotency_key"])
+            )
+        ).scalar_one()
+    )
+    assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_different_keys_create_separate_jobs(
+    db_session: AsyncSession, override_session
+) -> None:
+    base = {"query": "restaurants in Paris", "limit": 10, "budget_cap_usd": 2.0}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/jobs", json={**base, "idempotency_key": "run-alpha-001"})
+        second = await client.post("/jobs", json={**base, "idempotency_key": "run-beta-002"})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] != second.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_without_idempotency_key_behaves_as_before(
+    db_session: AsyncSession, override_session
+) -> None:
+    payload = {"query": "restaurants in Paris", "limit": 10, "budget_cap_usd": 2.0}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/jobs", json=payload)
+        second = await client.post("/jobs", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] != second.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_rejects_too_short_idempotency_key(
+    db_session: AsyncSession, override_session
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs",
+            json={
+                "query": "restaurants in Paris",
+                "idempotency_key": "short",
+            },
+        )
+    assert resp.status_code == 422

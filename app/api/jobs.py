@@ -13,6 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -29,6 +30,7 @@ class JobCreateRequest(BaseModel):
     query: str = Field(min_length=3, max_length=500)
     limit: int = Field(default=100, ge=1, le=1000)
     budget_cap_usd: float = Field(default=5.0, gt=0, le=100.0)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
 
 
 class JobResponse(BaseModel):
@@ -88,16 +90,49 @@ async def _run_in_background(job_id: UUID) -> None:
 @router.post("", response_model=JobResponse, status_code=201)
 async def create_job(
     payload: JobCreateRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> JobResponse:
+    if payload.idempotency_key:
+        existing = (
+            await session.execute(
+                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            # Return the prior job verbatim — classic idempotency semantics.
+            # Caller's retry is safe: no new work, no new enqueue.
+            response.status_code = 200
+            log.info(
+                "job_idempotent_hit",
+                job_id=str(existing.id),
+                idempotency_key=payload.idempotency_key,
+            )
+            return _to_response(
+                existing, entity_count=await _count_entities(session, existing.id)
+            )
+
     job = Job(
         query_raw=payload.query,
         limit=payload.limit,
         budget_cap_usd=payload.budget_cap_usd,
+        idempotency_key=payload.idempotency_key,
         status="pending",
     )
     session.add(job)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Race: a concurrent request with the same idempotency_key committed
+        # first and claimed the unique slot. Rewind and return the winner.
+        await session.rollback()
+        existing = (
+            await session.execute(
+                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+            )
+        ).scalar_one()
+        response.status_code = 200
+        return _to_response(existing, entity_count=await _count_entities(session, existing.id))
     await session.refresh(job)
 
     await _run_in_background(job.id)

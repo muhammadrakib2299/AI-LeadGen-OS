@@ -58,6 +58,9 @@ class Job(Base, UUIDPKMixin, TimestampMixin):
     budget_cap_usd: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=5.0)
     cost_usd: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=0.0)
 
+    # Client-supplied key for safe retries. Nullable: pre-existing clients don't need it.
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
+
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -65,6 +68,8 @@ class Job(Base, UUIDPKMixin, TimestampMixin):
     entities: Mapped[list[Entity]] = relationship(back_populates="job", cascade="all")
     fetches: Mapped[list[RawFetch]] = relationship(back_populates="job", cascade="all")
     exports: Mapped[list[Export]] = relationship(back_populates="job", cascade="all")
+
+    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_jobs_idempotency_key"),)
 
 
 class Entity(Base, UUIDPKMixin, TimestampMixin):
