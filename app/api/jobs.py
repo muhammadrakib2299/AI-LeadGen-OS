@@ -6,11 +6,13 @@ replaces this with Celery / RQ workers for durability across restarts.
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -167,16 +169,63 @@ async def create_job(
     return _to_response(job, entity_count=0)
 
 
+MAX_CSV_BYTES = 1_000_000  # 1 MB upload cap — 500 rows fit comfortably
+MAX_BULK_ROWS = 500
+
+# Accept common header aliases so callers don't have to rename columns.
+CSV_HEADER_ALIASES: dict[str, str] = {
+    "name": "name",
+    "company": "name",
+    "company_name": "name",
+    "organization": "name",
+    "website": "website",
+    "url": "website",
+    "homepage": "website",
+    "domain": "domain",
+    "hostname": "domain",
+}
+
+
 @router.post("/bulk", response_model=JobResponse, status_code=201)
 async def create_bulk_job(
     payload: BulkJobCreateRequest,
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> JobResponse:
-    # Every row must carry at least one of website or domain — without one of
-    # those we have nothing to crawl, so the enrichment pipeline has no input.
+    seeds = _seeds_from_json(payload.entities)
+    return await _create_bulk_job(
+        session=session,
+        response=response,
+        seeds=seeds,
+        budget_cap_usd=payload.budget_cap_usd,
+        idempotency_key=payload.idempotency_key,
+    )
+
+
+@router.post("/bulk/csv", response_model=JobResponse, status_code=201)
+async def create_bulk_job_from_csv(
+    response: Response,
+    file: UploadFile = File(...),
+    budget_cap_usd: float = Form(default=5.0, gt=0, le=100.0),
+    idempotency_key: str | None = Form(default=None, min_length=8, max_length=128),
+    session: AsyncSession = Depends(get_session),
+) -> JobResponse:
+    raw = await file.read(MAX_CSV_BYTES + 1)
+    if len(raw) > MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail=f"CSV exceeds {MAX_CSV_BYTES} bytes")
+    seeds = _parse_csv_upload(raw)
+    return await _create_bulk_job(
+        session=session,
+        response=response,
+        seeds=seeds,
+        budget_cap_usd=budget_cap_usd,
+        idempotency_key=idempotency_key,
+    )
+
+
+def _seeds_from_json(entities: list[BulkSeedEntity]) -> list[dict[str, Any]]:
     seeds: list[dict[str, Any]] = []
-    for row in payload.entities:
+    for row in entities:
         website = (row.website or "").strip() or None
         domain = (row.domain or "").strip() or None
         if not website and not domain:
@@ -185,17 +234,67 @@ async def create_bulk_job(
                 detail="every entity must include at least one of website or domain",
             )
         seeds.append(
-            {
-                "name": (row.name or "").strip() or None,
-                "website": website,
-                "domain": domain,
-            }
+            {"name": (row.name or "").strip() or None, "website": website, "domain": domain}
+        )
+    return seeds
+
+
+def _parse_csv_upload(raw: bytes) -> list[dict[str, Any]]:
+    try:
+        text = raw.decode("utf-8-sig")  # strip BOM if Excel emitted one
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=422, detail=f"CSV is not UTF-8: {exc}") from exc
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=422, detail="CSV has no header row")
+
+    header_map: dict[str, str] = {}
+    for raw_name in reader.fieldnames:
+        key = (raw_name or "").strip().lower()
+        if key in CSV_HEADER_ALIASES:
+            header_map[raw_name] = CSV_HEADER_ALIASES[key]
+    if "website" not in header_map.values() and "domain" not in header_map.values():
+        raise HTTPException(
+            status_code=422,
+            detail="CSV must include a website or domain column",
         )
 
-    if payload.idempotency_key:
+    seeds: list[dict[str, Any]] = []
+    for i, row in enumerate(reader):
+        if i >= MAX_BULK_ROWS:
+            raise HTTPException(
+                status_code=422, detail=f"CSV exceeds {MAX_BULK_ROWS} rows"
+            )
+        mapped: dict[str, Any] = {"name": None, "website": None, "domain": None}
+        for raw_col, canonical in header_map.items():
+            value = (row.get(raw_col) or "").strip() or None
+            if value is not None:
+                mapped[canonical] = value
+        if not mapped["website"] and not mapped["domain"]:
+            continue  # skip blank/partial rows silently — common in real-world CSVs
+        seeds.append(mapped)
+
+    if not seeds:
+        raise HTTPException(
+            status_code=422,
+            detail="no rows with a website or domain were found",
+        )
+    return seeds
+
+
+async def _create_bulk_job(
+    *,
+    session: AsyncSession,
+    response: Response,
+    seeds: list[dict[str, Any]],
+    budget_cap_usd: float,
+    idempotency_key: str | None,
+) -> JobResponse:
+    if idempotency_key:
         existing = (
             await session.execute(
-                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+                select(Job).where(Job.idempotency_key == idempotency_key)
             )
         ).scalar_one_or_none()
         if existing is not None:
@@ -207,8 +306,8 @@ async def create_bulk_job(
     job = Job(
         query_raw=f"bulk_enrichment({len(seeds)} entities)",
         limit=len(seeds),
-        budget_cap_usd=payload.budget_cap_usd,
-        idempotency_key=payload.idempotency_key,
+        budget_cap_usd=budget_cap_usd,
+        idempotency_key=idempotency_key,
         status="pending",
         job_type="bulk_enrichment",
         seed_entities=seeds,
@@ -220,7 +319,7 @@ async def create_bulk_job(
         await session.rollback()
         existing = (
             await session.execute(
-                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+                select(Job).where(Job.idempotency_key == idempotency_key)
             )
         ).scalar_one()
         response.status_code = 200

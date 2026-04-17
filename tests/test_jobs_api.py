@@ -381,6 +381,131 @@ async def test_post_jobs_bulk_rejects_empty_list(
 
 
 @pytest.mark.asyncio
+async def test_post_jobs_bulk_csv_happy_path(
+    db_session: AsyncSession, override_session
+) -> None:
+    csv_body = (
+        "name,website,domain\n"
+        "Foo Ltd,https://foo.example,foo.example\n"
+        "Bar Ltd,,bar.example\n"
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs/bulk/csv",
+            files={"file": ("leads.csv", csv_body, "text/csv")},
+            data={"budget_cap_usd": "3.0"},
+        )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["limit"] == 2
+
+    job = await db_session.get(Job, body["id"])
+    assert job is not None
+    assert job.job_type == "bulk_enrichment"
+    assert job.seed_entities[0] == {
+        "name": "Foo Ltd",
+        "website": "https://foo.example",
+        "domain": "foo.example",
+    }
+    assert job.seed_entities[1] == {
+        "name": "Bar Ltd",
+        "website": None,
+        "domain": "bar.example",
+    }
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_csv_accepts_header_aliases(
+    db_session: AsyncSession, override_session
+) -> None:
+    # "company" → name, "url" → website
+    csv_body = "company,url\nAcme Corp,https://acme.example\n"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs/bulk/csv",
+            files={"file": ("leads.csv", csv_body, "text/csv")},
+        )
+    assert resp.status_code == 201
+    job = await db_session.get(Job, resp.json()["id"])
+    assert job.seed_entities[0]["name"] == "Acme Corp"
+    assert job.seed_entities[0]["website"] == "https://acme.example"
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_csv_strips_bom_and_handles_blank_rows(
+    db_session: AsyncSession, override_session
+) -> None:
+    # Excel-saved CSVs often have a UTF-8 BOM and trailing blank lines.
+    csv_body = "\ufeffdomain\nfoo.example\n\n,\nbar.example\n"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs/bulk/csv",
+            files={"file": ("leads.csv", csv_body, "text/csv")},
+        )
+    assert resp.status_code == 201
+    job = await db_session.get(Job, resp.json()["id"])
+    # Two valid rows; the blank line and the lone comma row are skipped.
+    assert len(job.seed_entities) == 2
+    assert {row["domain"] for row in job.seed_entities} == {"foo.example", "bar.example"}
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_csv_rejects_csv_without_website_or_domain_column(
+    db_session: AsyncSession, override_session
+) -> None:
+    csv_body = "name\nFoo\nBar\n"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs/bulk/csv",
+            files={"file": ("leads.csv", csv_body, "text/csv")},
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_csv_rejects_empty_after_parse(
+    db_session: AsyncSession, override_session
+) -> None:
+    csv_body = "website\n\n\n"  # header present, all rows blank
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs/bulk/csv",
+            files={"file": ("leads.csv", csv_body, "text/csv")},
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_csv_rejects_non_utf8(
+    db_session: AsyncSession, override_session
+) -> None:
+    # 0xff 0xfe is a UTF-16 BOM — can't decode as UTF-8.
+    csv_body = b"\xff\xfesome junk"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs/bulk/csv",
+            files={"file": ("leads.csv", csv_body, "text/csv")},
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_csv_rejects_oversized_upload(
+    db_session: AsyncSession, override_session
+) -> None:
+    from app.api.jobs import MAX_CSV_BYTES
+
+    huge = ("website\n" + ("https://x.example\n" * 100_000)).encode()
+    assert len(huge) > MAX_CSV_BYTES
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/jobs/bulk/csv",
+            files={"file": ("big.csv", huge, "text/csv")},
+        )
+    assert resp.status_code == 413
+
+
+@pytest.mark.asyncio
 async def test_get_job_progress_is_null_before_discovery(
     db_session: AsyncSession, override_session
 ) -> None:
