@@ -44,7 +44,13 @@ def _places_response(with_website: bool = True) -> dict[str, Any]:
 
 class FakeLLM:
     async def complete_json(
-        self, system: str, user: str, *, model: str = "", max_tokens: int = 0
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str = "",
+        max_tokens: int = 0,
+        tier: str = "fast",
     ) -> dict[str, Any]:
         return {"entity_type": "restaurant", "city": "Paris", "country": "FR", "confidence": 0.95}
 

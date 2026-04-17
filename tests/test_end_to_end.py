@@ -32,7 +32,13 @@ SITE_BASE = "https://lepetitbistro.example.fr"
 
 class _FakeLLM:
     async def complete_json(
-        self, system: str, user: str, *, model: str = "", max_tokens: int = 0
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str = "",
+        max_tokens: int = 0,
+        tier: str = "fast",
     ) -> dict[str, Any]:
         return {
             "entity_type": "restaurant",

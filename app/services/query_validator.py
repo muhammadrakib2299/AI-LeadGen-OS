@@ -48,9 +48,16 @@ Rules:
 
 
 class QueryValidator:
-    def __init__(self, llm: LLMClient, min_confidence: float = 0.5) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        min_confidence: float = 0.5,
+        *,
+        escalate_on_low_confidence: bool = True,
+    ) -> None:
         self._llm = llm
         self._min_confidence = min_confidence
+        self._escalate = escalate_on_low_confidence
 
     async def validate(self, req: QueryRequest) -> ValidatedQuery | QueryValidationError:
         # Fast rule-based reject before spending an LLM call.
@@ -58,22 +65,21 @@ class QueryValidator:
         if rule_reject is not None:
             return rule_reject
 
-        raw = await self._llm.complete_json(
-            system=SYSTEM_PROMPT,
-            user=req.query,
-            max_tokens=512,
-        )
+        raw, parsed = await self._attempt(req, tier="fast")
+        if parsed is None:
+            return _shape_error()
 
-        try:
-            parsed = _coerce(raw, req.limit)
-        except (ValidationError, ValueError, TypeError) as exc:
-            log.warning("query_validator_bad_llm_shape", error=str(exc))
-            return QueryValidationError(
-                reason="Could not parse the query into a structured form.",
-                suggestions=[
-                    "Try a concrete entity type and a city, e.g. 'restaurants in Paris'.",
-                ],
+        # One escalation to the premium tier when the fast model is unsure.
+        # Skips when the query has no hope (no entity_type — model is guessing).
+        if self._escalate and parsed.confidence < self._min_confidence and parsed.entity_type:
+            log.info(
+                "query_validator_escalating",
+                query=req.query[:120],
+                fast_confidence=parsed.confidence,
             )
+            raw_p, premium = await self._attempt(req, tier="premium")
+            if premium is not None and premium.confidence >= parsed.confidence:
+                raw, parsed = raw_p, premium
 
         if parsed.confidence < self._min_confidence:
             return QueryValidationError(
@@ -91,6 +97,21 @@ class QueryValidator:
             )
 
         return parsed
+
+    async def _attempt(
+        self, req: QueryRequest, *, tier: str
+    ) -> tuple[dict, ValidatedQuery | None]:
+        raw = await self._llm.complete_json(
+            system=SYSTEM_PROMPT,
+            user=req.query,
+            max_tokens=512,
+            tier=tier,  # type: ignore[arg-type]
+        )
+        try:
+            return raw, _coerce(raw, req.limit)
+        except (ValidationError, ValueError, TypeError) as exc:
+            log.warning("query_validator_bad_llm_shape", error=str(exc), tier=tier)
+            return raw, None
 
     @staticmethod
     def _rule_based_reject(query: str) -> QueryValidationError | None:
@@ -132,6 +153,15 @@ def _coerce(raw: dict, limit: int) -> ValidatedQuery:
         keywords=list(raw.get("keywords") or []),
         limit=limit,
         confidence=float(raw.get("confidence", 0.0)),
+    )
+
+
+def _shape_error() -> QueryValidationError:
+    return QueryValidationError(
+        reason="Could not parse the query into a structured form.",
+        suggestions=[
+            "Try a concrete entity type and a city, e.g. 'restaurants in Paris'.",
+        ],
     )
 
 

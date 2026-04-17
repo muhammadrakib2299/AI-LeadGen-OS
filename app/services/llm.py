@@ -7,7 +7,7 @@ Tests pass in a FakeLLMClient instance; production wires AnthropicClient.
 from __future__ import annotations
 
 import json
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from anthropic import APIError, AsyncAnthropic
 
@@ -18,8 +18,18 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 
+LLMTier = Literal["fast", "premium"]
+
 # Per overview.md §5: Haiku / gpt-4o-mini as default cheap tier.
+# Premium escalation uses Sonnet 4.6 — still cheaper than Opus, and the
+# quality bump is usually enough to rescue an ambiguous query.
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+PREMIUM_MODEL = "claude-sonnet-4-6"
+
+TIER_TO_MODEL: dict[LLMTier, str] = {
+    "fast": DEFAULT_MODEL,
+    "premium": PREMIUM_MODEL,
+}
 
 
 @runtime_checkable
@@ -31,8 +41,13 @@ class LLMClient(Protocol):
         *,
         model: str = DEFAULT_MODEL,
         max_tokens: int = 1024,
+        tier: LLMTier = "fast",
     ) -> dict[str, Any]:
-        """Return the JSON object the model emitted. Raises on non-JSON output."""
+        """Return the JSON object the model emitted. Raises on non-JSON output.
+
+        `tier` selects a model family. Explicit `model=` wins over `tier=`,
+        so existing callers that already pass `model=` keep their behavior.
+        """
         ...
 
 
@@ -63,10 +78,15 @@ class AnthropicClient:
         *,
         model: str = DEFAULT_MODEL,
         max_tokens: int = 1024,
+        tier: LLMTier = "fast",
     ) -> dict[str, Any]:
+        # Tier hint picks a model family. An explicit model= arg always wins —
+        # callers that already specify a model don't get their choice overridden.
+        effective_model = model if model != DEFAULT_MODEL else TIER_TO_MODEL[tier]
+
         async def _do_call() -> Any:
             return await self._client.messages.create(
-                model=model,
+                model=effective_model,
                 max_tokens=max_tokens,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -77,7 +97,7 @@ class AnthropicClient:
         try:
             return json.loads(_extract_json(text))
         except json.JSONDecodeError as exc:
-            log.warning("llm_non_json_response", raw=text[:200])
+            log.warning("llm_non_json_response", raw=text[:200], model=effective_model)
             raise ValueError(f"LLM returned non-JSON: {text[:200]}") from exc
 
 

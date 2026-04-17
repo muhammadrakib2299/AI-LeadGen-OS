@@ -18,11 +18,19 @@ class FakeLLMClient:
     def __init__(self, response: dict[str, Any]) -> None:
         self.response = response
         self.calls: list[tuple[str, str]] = []
+        self.tiers: list[str] = []
 
     async def complete_json(
-        self, system: str, user: str, *, model: str = "", max_tokens: int = 0
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str = "",
+        max_tokens: int = 0,
+        tier: str = "fast",
     ) -> dict[str, Any]:
         self.calls.append((system, user))
+        self.tiers.append(tier)
         return self.response
 
 
@@ -128,3 +136,130 @@ async def test_bad_shape_from_llm_returns_validation_error() -> None:
     )
     result = await validator.validate(QueryRequest(query="dentists in Berlin"))
     assert isinstance(result, QueryValidationError)
+
+
+class _TieredFakeLLM:
+    """Fake that returns different responses for fast vs premium tiers."""
+
+    def __init__(self, fast: dict[str, Any], premium: dict[str, Any]) -> None:
+        self._responses = {"fast": fast, "premium": premium}
+        self.tiers: list[str] = []
+
+    async def complete_json(
+        self,
+        system: str,
+        user: str,
+        *,
+        model: str = "",
+        max_tokens: int = 0,
+        tier: str = "fast",
+    ) -> dict[str, Any]:
+        self.tiers.append(tier)
+        return self._responses[tier]
+
+
+async def test_escalates_to_premium_when_fast_confidence_is_low() -> None:
+    fake = _TieredFakeLLM(
+        fast={
+            "entity_type": "restaurant",
+            "city": "Paris",
+            "country": "FR",
+            "keywords": [],
+            "confidence": 0.35,  # below min_confidence=0.5
+            "reason_if_low_confidence": "ambiguous",
+        },
+        premium={
+            "entity_type": "restaurant",
+            "city": "Paris",
+            "country": "FR",
+            "keywords": [],
+            "confidence": 0.88,
+            "reason_if_low_confidence": "",
+        },
+    )
+    validator = QueryValidator(fake)  # type: ignore[arg-type]
+    result = await validator.validate(QueryRequest(query="someplace in Paris maybe"))
+    assert isinstance(result, ValidatedQuery)
+    assert result.confidence == pytest.approx(0.88)
+    assert fake.tiers == ["fast", "premium"]
+
+
+async def test_no_escalation_when_fast_already_confident() -> None:
+    fake = _TieredFakeLLM(
+        fast={
+            "entity_type": "dentist",
+            "city": "Berlin",
+            "country": "DE",
+            "keywords": [],
+            "confidence": 0.92,
+            "reason_if_low_confidence": "",
+        },
+        premium={"confidence": 0.0},  # should never be called
+    )
+    validator = QueryValidator(fake)  # type: ignore[arg-type]
+    result = await validator.validate(QueryRequest(query="dentists in Berlin"))
+    assert isinstance(result, ValidatedQuery)
+    assert fake.tiers == ["fast"]
+
+
+async def test_escalation_still_rejects_when_premium_also_low() -> None:
+    fake = _TieredFakeLLM(
+        fast={
+            "entity_type": "business",
+            "city": None,
+            "country": None,
+            "keywords": [],
+            "confidence": 0.2,
+            "reason_if_low_confidence": "very vague",
+        },
+        premium={
+            "entity_type": "business",
+            "city": None,
+            "country": None,
+            "keywords": [],
+            "confidence": 0.25,  # slightly higher but still below threshold
+            "reason_if_low_confidence": "still vague",
+        },
+    )
+    validator = QueryValidator(fake)  # type: ignore[arg-type]
+    result = await validator.validate(QueryRequest(query="cool businesses somewhere"))
+    assert isinstance(result, QueryValidationError)
+    assert fake.tiers == ["fast", "premium"]
+
+
+async def test_escalation_disabled_does_not_call_premium() -> None:
+    fake = _TieredFakeLLM(
+        fast={
+            "entity_type": "restaurant",
+            "city": "Paris",
+            "country": "FR",
+            "keywords": [],
+            "confidence": 0.3,
+            "reason_if_low_confidence": "ambiguous",
+        },
+        premium={"confidence": 1.0},  # should never be called
+    )
+    validator = QueryValidator(fake, escalate_on_low_confidence=False)  # type: ignore[arg-type]
+    result = await validator.validate(QueryRequest(query="somewhere in Paris"))
+    assert isinstance(result, QueryValidationError)
+    assert fake.tiers == ["fast"]
+
+
+async def test_no_escalation_when_no_entity_type() -> None:
+    # Premium can't save a query that doesn't even name an entity type —
+    # skip the escalation and save the call.
+    fake = _TieredFakeLLM(
+        fast={
+            "entity_type": "",
+            "city": None,
+            "country": None,
+            "keywords": [],
+            "confidence": 0.1,
+            "reason_if_low_confidence": "nothing to parse",
+        },
+        premium={"confidence": 1.0},
+    )
+    validator = QueryValidator(fake)  # type: ignore[arg-type]
+    result = await validator.validate(QueryRequest(query="hmm okay then"))
+    assert isinstance(result, QueryValidationError)
+    assert fake.tiers == ["fast"]
