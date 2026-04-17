@@ -166,7 +166,7 @@ async def test_job_runner_rejects_invalid_query(db_session) -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_job_runner_budget_guard_stops_pipeline(db_session) -> None:
-    respx.post(f"{PLACES_BASE_URL}/places:searchText").mock(
+    route = respx.post(f"{PLACES_BASE_URL}/places:searchText").mock(
         return_value=httpx.Response(200, json=_places_response())
     )
     # Cap is far below the Places call cost.
@@ -178,6 +178,8 @@ async def test_job_runner_budget_guard_stops_pipeline(db_session) -> None:
     await runner.run(job)
 
     assert job.status == "budget_exceeded"
+    # Pre-check refuses the spend before we hit the network.
+    assert route.call_count == 0
     entities = (
         (await db_session.execute(select(Entity).where(Entity.job_id == job.id))).scalars().all()
     )
@@ -277,6 +279,19 @@ async def test_bulk_enrichment_job_skips_discovery_and_crawls_seeds(db_session) 
     assert ent.domain == SITE_HOST
     # No Places call means no Places cost.
     assert float(job.cost_usd) == 0.0
+
+
+def test_cost_tracker_reserve_blocks_over_cap() -> None:
+    from app.services.job_runner import BudgetExceededError, _CostTracker
+
+    cost = _CostTracker(cap=1.0)
+    cost.reserve(0.4)
+    cost.reserve(0.5)
+    with pytest.raises(BudgetExceededError):
+        cost.reserve(0.2)  # 0.9 + 0.2 = 1.1 > 1.0
+    # Nothing extra was added on the failing reserve.
+    assert cost.total == pytest.approx(0.9)
+    assert cost.remaining == pytest.approx(0.1)
 
 
 @pytest.mark.asyncio

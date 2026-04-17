@@ -155,6 +155,16 @@ class JobRunner:
         cost: _CostTracker,
     ) -> list[Place]:
         query_string = _query_string_for_places(validated)
+
+        # Pre-check: use the most expensive adapter in the router as the
+        # upper bound — if even the priciest option fits, we're safe to spend.
+        # If it doesn't fit, we refuse without making a paid request.
+        projected = max(
+            (a.cost_per_call_usd for a in self._router.adapters),
+            default=0.0,
+        )
+        cost.reserve(projected)
+
         try:
             places, spent = await self._router.search(
                 query_string,
@@ -165,12 +175,15 @@ class JobRunner:
         except AllAdaptersDownError as exc:
             log.error("job_discovery_all_adapters_down", job_id=str(job.id), error=str(exc))
             raise
-        cost.add(spent)
+
+        # Adjust: spent may differ from our projection if a cheaper fallback
+        # adapter answered. Refund the difference so the total is accurate.
+        if spent < projected:
+            cost.add(spent - projected)
+
         job.cost_usd = cost.total  # type: ignore[assignment]
         job.places_discovered = len(places)
         await self._session.flush()
-        if cost.over_cap:
-            raise BudgetExceededError
         return places
 
     async def _process_place(
@@ -238,12 +251,29 @@ class _CostTracker:
         self._cap = cap
         self._total = 0.0
 
+    def reserve(self, amount: float) -> None:
+        """Raise BudgetExceededError if adding `amount` would exceed the cap.
+
+        Use this at the boundary *before* making the paid call — that way
+        we don't burn money we can't account for.
+        """
+        if self._total + amount > self._cap:
+            raise BudgetExceededError(
+                f"reserving ${amount:.6f} would push total past cap ${self._cap:.4f}"
+            )
+        self._total += amount
+
     def add(self, amount: float) -> None:
+        """Record a cost that was already incurred (refunds, post-hoc logging)."""
         self._total += amount
 
     @property
     def total(self) -> float:
         return round(self._total, 6)
+
+    @property
+    def remaining(self) -> float:
+        return round(max(0.0, self._cap - self._total), 6)
 
     @property
     def over_cap(self) -> bool:
