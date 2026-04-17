@@ -59,19 +59,27 @@ class JobRunner:
         await self._session.flush()
 
         try:
-            validated = await self._validate(job)
-            if validated is None:
-                return job
-
             cost_tracker = _CostTracker(cap=float(job.budget_cap_usd))
 
-            try:
-                places = await self._discover(job, validated, cost_tracker)
-            except BudgetExceededError:
-                log.warning("job_budget_exceeded_on_discovery", job_id=str(job.id))
-                job.status = "budget_exceeded"
-                job.error = f"Budget of ${job.budget_cap_usd} exceeded during discovery."
-                return job
+            if job.job_type == "bulk_enrichment":
+                validated = _bulk_pseudo_query(job)
+                places = _places_from_seeds(job.seed_entities or [])
+                job.places_discovered = len(places)
+                await self._session.flush()
+            else:
+                validated = await self._validate(job)
+                if validated is None:
+                    return job
+
+                try:
+                    places = await self._discover(job, validated, cost_tracker)
+                except BudgetExceededError:
+                    log.warning("job_budget_exceeded_on_discovery", job_id=str(job.id))
+                    job.status = "budget_exceeded"
+                    job.error = (
+                        f"Budget of ${job.budget_cap_usd} exceeded during discovery."
+                    )
+                    return job
 
             for place in places:
                 try:
@@ -227,6 +235,50 @@ class _CostTracker:
     @property
     def over_cap(self) -> bool:
         return self._total > self._cap
+
+
+def _bulk_pseudo_query(job: Job) -> ValidatedQuery:
+    """A minimal ValidatedQuery for bulk-enrichment jobs.
+
+    Bulk jobs skip query validation — the client already told us exactly which
+    entities to enrich. We still need a `ValidatedQuery` shape so the rest of
+    the pipeline (phone region inference, etc.) keeps working.
+    """
+    return ValidatedQuery(
+        entity_type="bulk",
+        city=None,
+        region=None,
+        country=None,
+        keywords=[],
+        limit=job.limit,
+        confidence=1.0,
+    )
+
+
+def _places_from_seeds(seeds: list[dict[str, Any]]) -> list[Place]:
+    """Turn client-supplied {name, website, domain} rows into Place objects.
+
+    The runner's per-place code path expects Place instances; giving it that
+    shape keeps the bulk path from forking the downstream pipeline.
+    """
+    out: list[Place] = []
+    for i, row in enumerate(seeds):
+        name = (row.get("name") or row.get("company") or row.get("domain") or "").strip()
+        website = row.get("website")
+        if not website and row.get("domain"):
+            website = f"https://{row['domain']}"
+        if not website:
+            continue
+        out.append(
+            Place.model_validate(
+                {
+                    "id": f"seed:{i}",
+                    "displayName": {"text": name or website, "languageCode": "en"},
+                    "websiteUri": website,
+                }
+            )
+        )
+    return out
 
 
 def _query_string_for_places(q: ValidatedQuery) -> str:

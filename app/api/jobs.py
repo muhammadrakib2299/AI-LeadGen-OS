@@ -33,6 +33,18 @@ class JobCreateRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
 
 
+class BulkSeedEntity(BaseModel):
+    name: str | None = Field(default=None, max_length=512)
+    website: str | None = Field(default=None, max_length=512)
+    domain: str | None = Field(default=None, max_length=255)
+
+
+class BulkJobCreateRequest(BaseModel):
+    entities: list[BulkSeedEntity] = Field(min_length=1, max_length=500)
+    budget_cap_usd: float = Field(default=5.0, gt=0, le=100.0)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
+
+
 class JobResponse(BaseModel):
     id: UUID
     status: str
@@ -152,6 +164,72 @@ async def create_job(
     await _run_in_background(job.id)
 
     log.info("job_created", job_id=str(job.id), query=payload.query[:120])
+    return _to_response(job, entity_count=0)
+
+
+@router.post("/bulk", response_model=JobResponse, status_code=201)
+async def create_bulk_job(
+    payload: BulkJobCreateRequest,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> JobResponse:
+    # Every row must carry at least one of website or domain — without one of
+    # those we have nothing to crawl, so the enrichment pipeline has no input.
+    seeds: list[dict[str, Any]] = []
+    for row in payload.entities:
+        website = (row.website or "").strip() or None
+        domain = (row.domain or "").strip() or None
+        if not website and not domain:
+            raise HTTPException(
+                status_code=422,
+                detail="every entity must include at least one of website or domain",
+            )
+        seeds.append(
+            {
+                "name": (row.name or "").strip() or None,
+                "website": website,
+                "domain": domain,
+            }
+        )
+
+    if payload.idempotency_key:
+        existing = (
+            await session.execute(
+                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            response.status_code = 200
+            return _to_response(
+                existing, entity_count=await _count_entities(session, existing.id)
+            )
+
+    job = Job(
+        query_raw=f"bulk_enrichment({len(seeds)} entities)",
+        limit=len(seeds),
+        budget_cap_usd=payload.budget_cap_usd,
+        idempotency_key=payload.idempotency_key,
+        status="pending",
+        job_type="bulk_enrichment",
+        seed_entities=seeds,
+    )
+    session.add(job)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = (
+            await session.execute(
+                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+            )
+        ).scalar_one()
+        response.status_code = 200
+        return _to_response(existing, entity_count=await _count_entities(session, existing.id))
+    await session.refresh(job)
+
+    await _run_in_background(job.id)
+
+    log.info("bulk_job_created", job_id=str(job.id), seed_count=len(seeds))
     return _to_response(job, entity_count=0)
 
 

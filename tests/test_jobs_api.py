@@ -331,6 +331,56 @@ async def test_get_job_exposes_progress_fields(
 
 
 @pytest.mark.asyncio
+async def test_post_jobs_bulk_creates_bulk_job(
+    db_session: AsyncSession, override_session
+) -> None:
+    payload = {
+        "entities": [
+            {"name": "Foo Ltd", "website": "https://foo.example"},
+            {"domain": "bar.example"},
+        ],
+        "budget_cap_usd": 3.0,
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/jobs/bulk", json=payload)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["status"] == "pending"
+    assert body["limit"] == 2
+
+    job = await db_session.get(Job, body["id"])
+    assert job is not None
+    assert job.job_type == "bulk_enrichment"
+    assert job.seed_entities is not None
+    assert len(job.seed_entities) == 2
+    assert job.seed_entities[0]["website"] == "https://foo.example"
+    assert job.seed_entities[1]["domain"] == "bar.example"
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_rejects_row_without_website_or_domain(
+    db_session: AsyncSession, override_session
+) -> None:
+    payload = {
+        "entities": [
+            {"name": "Missing Everything"},
+        ],
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/jobs/bulk", json=payload)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_post_jobs_bulk_rejects_empty_list(
+    db_session: AsyncSession, override_session
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/jobs/bulk", json={"entities": []})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_get_job_progress_is_null_before_discovery(
     db_session: AsyncSession, override_session
 ) -> None:

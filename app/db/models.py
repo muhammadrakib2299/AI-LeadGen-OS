@@ -51,8 +51,12 @@ class Job(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "jobs"
 
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    # 'discovery' = NL query → Places search; 'bulk_enrichment' = client-supplied list.
+    job_type: Mapped[str] = mapped_column(String(32), nullable=False, default="discovery")
     query_raw: Mapped[str] = mapped_column(Text, nullable=False)
     query_validated: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # For bulk_enrichment jobs: client-supplied list of {name?, website?, domain?} rows.
+    seed_entities: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     limit: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
 
     budget_cap_usd: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=5.0)

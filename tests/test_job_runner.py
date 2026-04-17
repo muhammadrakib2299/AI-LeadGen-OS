@@ -232,3 +232,68 @@ async def test_job_runner_handles_place_with_no_website(db_session) -> None:
     assert ent.domain is None
     # Places national number "01 42 00 00 00" with FR region → E.164.
     assert ent.phone == "+33142000000"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_bulk_enrichment_job_skips_discovery_and_crawls_seeds(db_session) -> None:
+    # No Places mock — the runner must not call Places for bulk jobs.
+    respx.get(f"{SITE_BASE}/robots.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE_BASE}/").mock(
+        return_value=_text_html(
+            "<html><body>"
+            '<a href="mailto:hello@lepetitbistro.example.fr">email</a>'
+            "</body></html>"
+        )
+    )
+    respx.get(url__regex=rf"^{SITE_BASE}/.*").mock(
+        return_value=httpx.Response(404, text="", headers={"content-type": "text/html"})
+    )
+
+    job = Job(
+        query_raw="bulk_enrichment(1 entities)",
+        limit=1,
+        budget_cap_usd=5.0,
+        job_type="bulk_enrichment",
+        seed_entities=[{"name": "Le Petit Bistro", "website": SITE_BASE, "domain": None}],
+    )
+    db_session.add(job)
+    await db_session.flush()
+
+    runner = await _make_runner(db_session)
+    await runner.run(job)
+
+    assert job.status == "succeeded"
+    assert job.places_discovered == 1
+    assert job.places_processed == 1
+
+    entities = (
+        (await db_session.execute(select(Entity).where(Entity.job_id == job.id))).scalars().all()
+    )
+    assert len(entities) == 1
+    ent = entities[0]
+    assert ent.name == "Le Petit Bistro"
+    assert ent.email == "hello@lepetitbistro.example.fr"
+    assert ent.domain == SITE_HOST
+    # No Places call means no Places cost.
+    assert float(job.cost_usd) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_bulk_enrichment_with_only_domain_synthesizes_https_website(db_session) -> None:
+    job = Job(
+        query_raw="bulk_enrichment(1 entities)",
+        limit=1,
+        budget_cap_usd=5.0,
+        job_type="bulk_enrichment",
+        seed_entities=[{"name": None, "website": None, "domain": "example.fr"}],
+    )
+    db_session.add(job)
+    await db_session.flush()
+
+    # Stub the crawler + extractor — we only care about URL construction here.
+    from app.services.job_runner import _places_from_seeds
+
+    places = _places_from_seeds(job.seed_entities or [])
+    assert len(places) == 1
+    assert places[0].website_uri == "https://example.fr"
