@@ -58,6 +58,11 @@ class Job(Base, UUIDPKMixin, TimestampMixin):
     budget_cap_usd: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=5.0)
     cost_usd: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=0.0)
 
+    # Live progress counters. Written by the runner so /jobs GET can show a
+    # progress bar without the caller polling the entities table.
+    places_discovered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    places_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     # Client-supplied key for safe retries. Nullable: pre-existing clients don't need it.
     idempotency_key: Mapped[str | None] = mapped_column(String(128))
 

@@ -43,6 +43,9 @@ class JobResponse(BaseModel):
     cost_usd: float
     error: str | None
     entity_count: int
+    places_discovered: int
+    places_processed: int
+    progress_percent: float | None
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -56,6 +59,14 @@ class JobListResponse(BaseModel):
 
 
 def _to_response(job: Job, entity_count: int) -> JobResponse:
+    progress: float | None
+    if job.places_discovered > 0:
+        progress = round(
+            100.0 * min(job.places_processed, job.places_discovered) / job.places_discovered,
+            1,
+        )
+    else:
+        progress = None
     return JobResponse(
         id=job.id,
         status=job.status,
@@ -66,6 +77,9 @@ def _to_response(job: Job, entity_count: int) -> JobResponse:
         cost_usd=float(job.cost_usd),
         error=job.error,
         entity_count=entity_count,
+        places_discovered=job.places_discovered,
+        places_processed=job.places_processed,
+        progress_percent=progress,
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,

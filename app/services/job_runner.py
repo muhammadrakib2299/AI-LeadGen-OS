@@ -89,6 +89,11 @@ class JobRunner:
                         place_id=place.id,
                         error=str(exc),
                     )
+                finally:
+                    # Every place counts toward progress, including ones we skipped
+                    # (blacklisted, errored) — otherwise the bar stalls.
+                    job.places_processed += 1
+                    await self._session.flush()
 
             if job.status == "running":
                 try:
@@ -141,6 +146,8 @@ class JobRunner:
         )
         cost.add(TEXT_SEARCH_COST_USD)
         job.cost_usd = cost.total  # type: ignore[assignment]
+        job.places_discovered = len(places)
+        await self._session.flush()
         if cost.over_cap:
             raise BudgetExceededError
         return places

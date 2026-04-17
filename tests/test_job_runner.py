@@ -124,6 +124,10 @@ async def test_job_runner_happy_path_discovers_crawls_extracts_persists(db_sessi
     assert ent.quality_score is not None and ent.quality_score >= 90
     assert ent.review_status == "approved"
 
+    # Progress counters reflect the single place that came back and was processed.
+    assert job.places_discovered == 1
+    assert job.places_processed == 1
+
 
 @pytest.mark.asyncio
 @respx.mock

@@ -304,3 +304,48 @@ async def test_post_jobs_rejects_too_short_idempotency_key(
             },
         )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_job_exposes_progress_fields(
+    db_session: AsyncSession, override_session
+) -> None:
+    job = Job(
+        query_raw="cafes in Lisbon",
+        limit=20,
+        budget_cap_usd=2.0,
+        status="running",
+        places_discovered=10,
+        places_processed=3,
+    )
+    db_session.add(job)
+    await db_session.flush()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/jobs/{job.id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["places_discovered"] == 10
+    assert body["places_processed"] == 3
+    assert body["progress_percent"] == 30.0
+
+
+@pytest.mark.asyncio
+async def test_get_job_progress_is_null_before_discovery(
+    db_session: AsyncSession, override_session
+) -> None:
+    job = Job(
+        query_raw="cafes in Lisbon",
+        limit=20,
+        budget_cap_usd=2.0,
+        status="pending",
+    )
+    db_session.add(job)
+    await db_session.flush()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/jobs/{job.id}")
+    body = resp.json()
+    assert body["places_discovered"] == 0
+    assert body["places_processed"] == 0
+    assert body["progress_percent"] is None
