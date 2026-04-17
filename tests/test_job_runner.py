@@ -220,4 +220,5 @@ async def test_job_runner_handles_place_with_no_website(db_session) -> None:
     ent = entities[0]
     assert ent.website is None
     assert ent.domain is None
-    assert ent.phone == "01 42 00 00 00"  # fallback to Places national number
+    # Places national number "01 42 00 00 00" with FR region → E.164.
+    assert ent.phone == "+33142000000"

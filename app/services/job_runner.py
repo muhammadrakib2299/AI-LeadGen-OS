@@ -19,12 +19,14 @@ from app.models.contacts import ExtractedContacts
 from app.models.places import Place
 from app.models.query import QueryRequest, QueryValidationError, ValidatedQuery
 from app.services.blacklist import is_blacklisted
-from app.services.crawler import Crawler
+from app.services.crawler import Crawler, CrawlResult
 from app.services.dedupe import dedupe_job
 from app.services.email_verify import EmailVerification, verify_email
+from app.services.phone_verify import PhoneVerification, verify_phone
 from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
 from app.services.quality import review_status_for, score_entity
 from app.services.query_validator import QueryValidator
+from app.services.url_liveness import UrlLiveness, liveness_from_crawl
 
 log = get_logger(__name__)
 
@@ -156,7 +158,8 @@ class JobRunner:
             log.info("job_place_skipped_blacklisted", job_id=str(job.id), domain=domain)
             return
 
-        contacts = await self._extract_contacts(job, place)
+        pages = await self._crawl(job, place)
+        contacts = await self._extractor.extract(pages)
 
         primary_email = contacts.emails[0] if contacts.emails else None
         if primary_email and await is_blacklisted(self._session, email=primary_email):
@@ -170,22 +173,36 @@ class JobRunner:
             except Exception as exc:  # DNS hiccups must never kill a job.
                 log.warning("email_verify_failed", email=primary_email, error=str(exc))
 
+        phone_raw = contacts.phones[0] if contacts.phones else place.national_phone_number
+        phone_region = place.country_code() or validated.country
+        phone_verification: PhoneVerification | None = None
+        if phone_raw:
+            try:
+                phone_verification = verify_phone(phone_raw, region=phone_region)
+            except Exception as exc:  # Defensive — libphonenumber shouldn't raise beyond parse.
+                log.warning("phone_verify_failed", phone=phone_raw, error=str(exc))
+
+        url_liveness: UrlLiveness | None = None
+        if place.website_uri:
+            url_liveness = liveness_from_crawl(place.website_uri, pages)
+
         entity = _build_entity(
             job_id=job.id,
             place=place,
             contacts=contacts,
             validated=validated,
             email_verification=email_verification,
+            phone_verification=phone_verification,
+            url_liveness=url_liveness,
         )
         self._session.add(entity)
         await self._session.flush()
         job.cost_usd = cost.total  # type: ignore[assignment]
 
-    async def _extract_contacts(self, job: Job, place: Place) -> ExtractedContacts:
+    async def _crawl(self, job: Job, place: Place) -> list[CrawlResult]:
         if not place.website_uri:
-            return ExtractedContacts()
-        pages = await self._crawler.crawl_entity_site(place.website_uri, job_id=job.id)
-        return await self._extractor.extract(pages)
+            return []
+        return await self._crawler.crawl_entity_site(place.website_uri, job_id=job.id)
 
 
 class _CostTracker:
@@ -237,6 +254,8 @@ def _build_entity(
     contacts: ExtractedContacts,
     validated: ValidatedQuery,
     email_verification: EmailVerification | None = None,
+    phone_verification: PhoneVerification | None = None,
+    url_liveness: UrlLiveness | None = None,
 ) -> Entity:
     now_iso = _now().isoformat()
     domain = _domain_of(place.website_uri)
@@ -248,7 +267,14 @@ def _build_entity(
         valid_emails = contacts.emails
 
     email = valid_emails[0] if valid_emails else None
-    phone = contacts.phones[0] if contacts.phones else place.national_phone_number
+    phone_raw = contacts.phones[0] if contacts.phones else place.national_phone_number
+    phone_from_crawler = bool(contacts.phones)
+    # Prefer E.164 from verification when it parsed successfully.
+    phone = (
+        phone_verification.e164
+        if phone_verification and phone_verification.e164
+        else phone_raw
+    )
 
     field_sources: dict[str, Any] = {
         "name": {"source": "google_places", "fetched_at": now_iso, "confidence": 0.98},
@@ -260,11 +286,19 @@ def _build_entity(
             "confidence": 0.95,
         }
     if place.website_uri:
-        field_sources["website"] = {
+        website_base_conf = 0.99
+        website_boost = url_liveness.confidence_boost if url_liveness else 1.0
+        website_entry: dict[str, Any] = {
             "source": "google_places",
             "fetched_at": now_iso,
-            "confidence": 0.99,
+            "confidence": round(max(0.0, min(1.0, website_base_conf * website_boost)), 3),
         }
+        if url_liveness is not None:
+            website_entry["liveness"] = {
+                "status": url_liveness.status,
+                "http_status": url_liveness.http_status,
+            }
+        field_sources["website"] = website_entry
     if email:
         base_conf = 0.75 if contacts.used_llm else 0.90
         boost = email_verification.confidence_boost if email_verification else 1.0
@@ -280,11 +314,20 @@ def _build_entity(
             }
         field_sources["email"] = entry
     if phone:
-        field_sources["phone"] = {
-            "source": "crawler" if phone in contacts.phones else "google_places",
+        phone_base_conf = 0.90
+        phone_boost = phone_verification.confidence_boost if phone_verification else 1.0
+        phone_entry: dict[str, Any] = {
+            "source": "crawler" if phone_from_crawler else "google_places",
             "fetched_at": now_iso,
-            "confidence": 0.90,
+            "confidence": round(max(0.0, min(1.0, phone_base_conf * phone_boost)), 3),
         }
+        if phone_verification is not None:
+            phone_entry["verification"] = {
+                "status": phone_verification.status,
+                "kind": phone_verification.kind,
+                "region": phone_verification.region,
+            }
+        field_sources["phone"] = phone_entry
 
     socials_payload = {s.platform: s.url for s in contacts.socials} if contacts.socials else None
 

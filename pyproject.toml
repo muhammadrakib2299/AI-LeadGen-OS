@@ -29,6 +29,7 @@ dependencies = [
     "selectolax>=0.3.27",
     "email-validator>=2.2",
     "dnspython>=2.7",
+    "phonenumbers>=8.13",
     "python-multipart>=0.0.17",
 ]
 
