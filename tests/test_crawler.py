@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from app.services.crawler import Crawler, PerDomainLimiter
+from app.services.crawler import Crawler, PerDomainLimiter, parse_retry_after
 
 SITE_BASE = "https://example.co.uk"
 
@@ -165,3 +165,105 @@ async def test_crawler_writes_audit_rows(db_session) -> None:
     assert any(r.response_status == 200 for r in rows)
     assert all(r.method == "GET" for r in rows)
     assert all(r.legal_basis == "legitimate_interest" for r in rows)
+
+
+def test_parse_retry_after_delta_seconds() -> None:
+    assert parse_retry_after("5") == 5.0
+    assert parse_retry_after("  12.5 ") == 12.5
+    assert parse_retry_after("0") == 0.0
+
+
+def test_parse_retry_after_http_date() -> None:
+    from datetime import UTC, datetime, timedelta
+    from email.utils import format_datetime
+
+    future = datetime.now(UTC) + timedelta(seconds=30)
+    header = format_datetime(future, usegmt=True)
+    result = parse_retry_after(header)
+    assert result is not None
+    # Tolerate a few seconds of drift due to clock + parse latency.
+    assert 25 <= result <= 35
+
+
+def test_parse_retry_after_rejects_garbage() -> None:
+    assert parse_retry_after(None) is None
+    assert parse_retry_after("") is None
+    assert parse_retry_after("not-a-date") is None
+
+
+async def test_limiter_cooldown_blocks_until_it_expires() -> None:
+    import time as _time
+
+    limiter = PerDomainLimiter(min_interval_s=0)
+    limiter.set_cooldown("example.com", 0.08)
+    t0 = _time.monotonic()
+    await limiter.acquire("example.com")
+    elapsed = _time.monotonic() - t0
+    assert elapsed >= 0.06  # waited roughly the cooldown
+
+
+async def test_limiter_cooldown_is_capped() -> None:
+    from app.services.crawler import RETRY_AFTER_MAX_S
+
+    limiter = PerDomainLimiter(min_interval_s=0)
+    limiter.set_cooldown("example.com", 100_000.0)
+    # cooldown_remaining should never exceed the cap.
+    assert limiter.cooldown_remaining("example.com") <= RETRY_AFTER_MAX_S + 0.5
+
+
+@respx.mock
+async def test_crawler_honors_retry_after_on_429() -> None:
+    respx.get(f"{SITE_BASE}/robots.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE_BASE}/").mock(
+        return_value=httpx.Response(
+            429,
+            text="rate limited",
+            headers={"Retry-After": "42", "content-type": "text/plain"},
+        )
+    )
+    respx.get(url__regex=rf"^{SITE_BASE}/.*").mock(return_value=httpx.Response(404))
+
+    async with httpx.AsyncClient() as http:
+        crawler = Crawler(http=http, per_domain_interval_s=0)
+        await crawler.crawl_entity_site(SITE_BASE)
+        # The domain is now parked.
+        remaining = crawler._limiter.cooldown_remaining("example.co.uk")
+    assert 40 <= remaining <= 43
+
+
+@respx.mock
+async def test_crawler_honors_retry_after_on_503() -> None:
+    respx.get(f"{SITE_BASE}/robots.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE_BASE}/").mock(
+        return_value=httpx.Response(
+            503,
+            text="overloaded",
+            headers={"Retry-After": "15", "content-type": "text/plain"},
+        )
+    )
+    respx.get(url__regex=rf"^{SITE_BASE}/.*").mock(return_value=httpx.Response(404))
+
+    async with httpx.AsyncClient() as http:
+        crawler = Crawler(http=http, per_domain_interval_s=0)
+        await crawler.crawl_entity_site(SITE_BASE)
+        remaining = crawler._limiter.cooldown_remaining("example.co.uk")
+    assert 13 <= remaining <= 16
+
+
+@respx.mock
+async def test_crawler_ignores_retry_after_on_2xx() -> None:
+    respx.get(f"{SITE_BASE}/robots.txt").mock(return_value=httpx.Response(404))
+    respx.get(f"{SITE_BASE}/").mock(
+        return_value=httpx.Response(
+            200,
+            text="<h1>ok</h1>",
+            headers={"Retry-After": "999", "content-type": "text/html"},
+        )
+    )
+    respx.get(url__regex=rf"^{SITE_BASE}/.*").mock(return_value=httpx.Response(404))
+
+    async with httpx.AsyncClient() as http:
+        crawler = Crawler(http=http, per_domain_interval_s=0)
+        await crawler.crawl_entity_site(SITE_BASE)
+        remaining = crawler._limiter.cooldown_remaining("example.co.uk")
+    assert remaining == 0.0

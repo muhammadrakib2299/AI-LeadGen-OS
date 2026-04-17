@@ -19,6 +19,7 @@ import asyncio
 import hashlib
 import time
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
@@ -71,25 +72,76 @@ class CrawlResult:
     content_hash: str | None
 
 
+RETRY_AFTER_MAX_S = 300.0  # cap at 5 minutes so a hostile server can't park us indefinitely
+
+
 class PerDomainLimiter:
-    """Single-process per-domain gate; per-worker is fine for Phase 1."""
+    """Single-process per-domain gate; per-worker is fine for Phase 1.
+
+    Tracks two things per domain:
+    - a rolling min-interval floor between requests
+    - a Retry-After cooldown set when a server sent 429/503 with a hint
+    """
 
     def __init__(self, min_interval_s: float) -> None:
         self._min_interval = min_interval_s
         self._locks: dict[str, asyncio.Lock] = {}
         self._last: dict[str, float] = {}
+        self._cooldown_until: dict[str, float] = {}
 
     async def acquire(self, domain: str) -> None:
-        if self._min_interval <= 0:
-            return
         lock = self._locks.setdefault(domain, asyncio.Lock())
         async with lock:
-            last = self._last.get(domain)
-            if last is not None:
-                elapsed = time.monotonic() - last
-                if elapsed < self._min_interval:
-                    await asyncio.sleep(self._min_interval - elapsed)
+            now = time.monotonic()
+            cooldown = self._cooldown_until.get(domain)
+            if cooldown is not None and cooldown > now:
+                await asyncio.sleep(cooldown - now)
+                now = time.monotonic()
+            if self._min_interval > 0:
+                last = self._last.get(domain)
+                if last is not None:
+                    elapsed = now - last
+                    if elapsed < self._min_interval:
+                        await asyncio.sleep(self._min_interval - elapsed)
             self._last[domain] = time.monotonic()
+
+    def set_cooldown(self, domain: str, seconds: float) -> None:
+        """Park the domain until `seconds` from now — honored by next acquire()."""
+        capped = max(0.0, min(seconds, RETRY_AFTER_MAX_S))
+        self._cooldown_until[domain] = time.monotonic() + capped
+
+    def cooldown_remaining(self, domain: str) -> float:
+        """Seconds left on the current cooldown, or 0 if none."""
+        until = self._cooldown_until.get(domain)
+        if until is None:
+            return 0.0
+        return max(0.0, until - time.monotonic())
+
+
+def parse_retry_after(header_value: str | None) -> float | None:
+    """Parse an HTTP Retry-After header. Supports delta-seconds or HTTP-date.
+
+    Returns seconds-from-now (>= 0) or None if the header is absent/malformed.
+    """
+    if not header_value:
+        return None
+    value = header_value.strip()
+    # delta-seconds form
+    try:
+        seconds = float(value)
+    except ValueError:
+        pass
+    else:
+        return max(0.0, seconds)
+    # HTTP-date form (RFC 7231)
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if dt is None:
+        return None
+    delta = dt.timestamp() - time.time()
+    return max(0.0, delta)
 
 
 class Crawler:
@@ -147,6 +199,16 @@ class Crawler:
             if robots is not None and not robots.can_fetch(self._user_agent, target):
                 log.info("crawler_disallowed_by_robots", url=target)
                 continue
+            # If a prior fetch got told to cool down, stop hammering this host
+            # for the rest of the entity's paths. We'll pick it up on a later run.
+            remaining = self._limiter.cooldown_remaining(urlparse(target).netloc)
+            if remaining > 0:
+                log.info(
+                    "crawler_skipping_due_to_cooldown",
+                    domain=urlparse(target).netloc,
+                    remaining_s=round(remaining, 2),
+                )
+                break
             res = await self._fetch_one(target, job_id=job_id)
             if res is None:
                 continue
@@ -201,6 +263,17 @@ class Crawler:
             )
             return None
         duration_ms = int((time.monotonic() - started) * 1000)
+
+        if response.status_code in (429, 503):
+            retry_after = parse_retry_after(response.headers.get("retry-after"))
+            if retry_after is not None:
+                self._limiter.set_cooldown(parsed.netloc, retry_after)
+                log.info(
+                    "crawler_retry_after_set",
+                    domain=parsed.netloc,
+                    status=response.status_code,
+                    seconds=round(retry_after, 2),
+                )
 
         content_type = response.headers.get("content-type", "")
         is_html = "text/html" in content_type or "application/xhtml" in content_type
