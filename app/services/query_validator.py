@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from app.core.logging import get_logger
 from app.models.query import QueryRequest, QueryValidationError, ValidatedQuery
 from app.services.llm import LLMClient
+from app.services.query_rules import try_rule_parse
 
 log = get_logger(__name__)
 
@@ -64,6 +65,18 @@ class QueryValidator:
         rule_reject = self._rule_based_reject(req.query)
         if rule_reject is not None:
             return rule_reject
+
+        # Zero-LLM fast path for recognized "<entity> in <location>" shapes.
+        # Saves an Anthropic/Gemini/Ollama call per matching discovery job.
+        rule_match = try_rule_parse(req.query, limit=req.limit)
+        if rule_match is not None:
+            log.info(
+                "query_validator_rule_hit",
+                entity_type=rule_match.entity_type,
+                city=rule_match.city,
+                country=rule_match.country,
+            )
+            return rule_match
 
         raw, parsed = await self._attempt(req, tier="fast")
         if parsed is None:

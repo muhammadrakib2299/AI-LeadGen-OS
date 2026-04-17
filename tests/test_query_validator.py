@@ -52,12 +52,28 @@ async def test_valid_query_returns_validated_query() -> None:
             "reason_if_low_confidence": "",
         }
     )
-    result = await validator.validate(QueryRequest(query="restaurants in Paris"))
+    # Use a query the rule parser can't solve so the LLM path runs.
+    result = await validator.validate(
+        QueryRequest(query="the coolest little restaurant around Paris somewhere")
+    )
     assert isinstance(result, ValidatedQuery)
     assert result.entity_type == "restaurant"
     assert result.city == "Paris"
     assert result.country == "FR"
     assert len(fake.calls) == 1
+
+
+async def test_rule_fast_path_skips_llm_entirely() -> None:
+    validator, fake = _make_validator(
+        {"entity_type": "never", "confidence": 0.99}  # LLM would return this — never called
+    )
+    result = await validator.validate(QueryRequest(query="restaurants in Paris"))
+    assert isinstance(result, ValidatedQuery)
+    assert result.entity_type == "restaurants"
+    assert result.city == "Paris"
+    assert result.country == "FR"
+    # The LLM was never consulted.
+    assert fake.calls == []
 
 
 async def test_country_uk_normalized_to_gb() -> None:
@@ -134,7 +150,8 @@ async def test_bad_shape_from_llm_returns_validation_error() -> None:
             "confidence": "not-a-number",  # forces pydantic error
         }
     )
-    result = await validator.validate(QueryRequest(query="dentists in Berlin"))
+    # Use a query the rule parser can't solve so we exercise the LLM path.
+    result = await validator.validate(QueryRequest(query="some dental clinics near my area"))
     assert isinstance(result, QueryValidationError)
 
 
@@ -197,7 +214,8 @@ async def test_no_escalation_when_fast_already_confident() -> None:
         premium={"confidence": 0.0},  # should never be called
     )
     validator = QueryValidator(fake)  # type: ignore[arg-type]
-    result = await validator.validate(QueryRequest(query="dentists in Berlin"))
+    # Free-form query — rule parser won't match, so the LLM path runs.
+    result = await validator.validate(QueryRequest(query="cool dentist practices near me"))
     assert isinstance(result, ValidatedQuery)
     assert fake.tiers == ["fast"]
 
@@ -240,7 +258,8 @@ async def test_escalation_disabled_does_not_call_premium() -> None:
         premium={"confidence": 1.0},  # should never be called
     )
     validator = QueryValidator(fake, escalate_on_low_confidence=False)  # type: ignore[arg-type]
-    result = await validator.validate(QueryRequest(query="somewhere in Paris"))
+    # Free-form query — rule parser can't solve; the LLM path is exercised.
+    result = await validator.validate(QueryRequest(query="some kind of place around Paris"))
     assert isinstance(result, QueryValidationError)
     assert fake.tiers == ["fast"]
 

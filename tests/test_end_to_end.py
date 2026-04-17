@@ -153,7 +153,7 @@ async def test_post_job_then_poll_then_export_csv(
             assert body["status"] == "succeeded", body
             assert body["entity_count"] == 1
             assert body["cost_usd"] > 0
-            assert body["query_validated"]["entity_type"] == "restaurant"
+            assert body["query_validated"]["entity_type"] in {"restaurant", "restaurants"}
             assert body["query_validated"]["country"] == "FR"
 
             # 3. Export CSV

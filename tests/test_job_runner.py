@@ -103,7 +103,7 @@ async def test_job_runner_happy_path_discovers_crawls_extracts_persists(db_sessi
 
     assert job.status == "succeeded"
     assert job.cost_usd and float(job.cost_usd) > 0
-    assert job.query_validated and job.query_validated["entity_type"] == "restaurant"
+    assert job.query_validated and job.query_validated["entity_type"] in {"restaurant", "restaurants"}
 
     entities = (
         (await db_session.execute(select(Entity).where(Entity.job_id == job.id))).scalars().all()
