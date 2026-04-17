@@ -6,11 +6,13 @@ Tests pass in a FakeLLMClient instance; production wires AnthropicClient.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from anthropic import APIError, AsyncAnthropic
 
+from app.core.cache import KVCache
 from app.core.circuit import CircuitBreaker
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -58,18 +60,28 @@ _ANTHROPIC_BREAKER = CircuitBreaker(
     expected_exceptions=(APIError,),
 )
 
+# Short enough that a fix-your-prompt iteration loop still sees the change,
+# long enough that repeated similar queries within a session get the win.
+DEFAULT_CACHE_TTL_S = 600
+
 
 class AnthropicClient:
     """Production LLM client. Do not instantiate in tests."""
 
     def __init__(
-        self, api_key: str | None = None, breaker: CircuitBreaker | None = None
+        self,
+        api_key: str | None = None,
+        breaker: CircuitBreaker | None = None,
+        cache: KVCache | None = None,
+        cache_ttl_s: int = DEFAULT_CACHE_TTL_S,
     ) -> None:
         key = api_key or get_settings().anthropic_api_key
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY is not set. Real LLM calls are disabled.")
         self._client = AsyncAnthropic(api_key=key)
         self._breaker = breaker or _ANTHROPIC_BREAKER
+        self._cache = cache
+        self._cache_ttl = cache_ttl_s
 
     async def complete_json(
         self,
@@ -84,6 +96,13 @@ class AnthropicClient:
         # callers that already specify a model don't get their choice overridden.
         effective_model = model if model != DEFAULT_MODEL else TIER_TO_MODEL[tier]
 
+        cache_key = _cache_key(effective_model, system, user) if self._cache else None
+        if self._cache is not None and cache_key is not None:
+            cached = await self._cache.get(cache_key)
+            if isinstance(cached, dict):
+                log.info("llm_cache_hit", model=effective_model)
+                return cached
+
         async def _do_call() -> Any:
             return await self._client.messages.create(
                 model=effective_model,
@@ -95,10 +114,20 @@ class AnthropicClient:
         resp = await self._breaker.call(_do_call)
         text = "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
         try:
-            return json.loads(_extract_json(text))
+            parsed = json.loads(_extract_json(text))
         except json.JSONDecodeError as exc:
             log.warning("llm_non_json_response", raw=text[:200], model=effective_model)
             raise ValueError(f"LLM returned non-JSON: {text[:200]}") from exc
+
+        if self._cache is not None and cache_key is not None and isinstance(parsed, dict):
+            await self._cache.set(cache_key, parsed, ttl_s=self._cache_ttl)
+
+        return parsed
+
+
+def _cache_key(model: str, system: str, user: str) -> str:
+    blob = f"{model}\x1e{system}\x1e{user}".encode()
+    return f"llm:{hashlib.sha256(blob).hexdigest()}"
 
 
 def _extract_json(text: str) -> str:
