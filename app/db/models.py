@@ -182,6 +182,21 @@ class Export(Base, UUIDPKMixin, TimestampMixin):
     job: Mapped[Job] = relationship(back_populates="exports")
 
 
+class SearchTemplate(Base, UUIDPKMixin, TimestampMixin):
+    """A saved discovery query. Lets the operator re-run common searches in one click."""
+
+    __tablename__ = "search_templates"
+
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    default_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    default_budget_cap_usd: Mapped[float] = mapped_column(
+        Numeric(10, 4), nullable=False, default=5.0
+    )
+
+    __table_args__ = (UniqueConstraint("name", name="uq_search_templates_name"),)
+
+
 class Blacklist(Base, UUIDPKMixin, TimestampMixin):
     """GDPR erasure / opt-out requests. Checked before every entity write.
 

@@ -103,6 +103,22 @@ export interface ReviewDecision {
   review_status: string;
 }
 
+export interface SearchTemplate {
+  id: string;
+  name: string;
+  query: string;
+  default_limit: number;
+  default_budget_cap_usd: number;
+  created_at: string;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  query: string;
+  default_limit?: number;
+  default_budget_cap_usd?: number;
+}
+
 export interface CreateDiscoveryJobRequest {
   query: string;
   limit?: number;
@@ -207,4 +223,30 @@ export const api = {
 
   rejectEntity: (entityId: string): Promise<ReviewDecision> =>
     request<ReviewDecision>(`/review/${entityId}/reject`, { method: "POST" }),
+
+  listTemplates: (): Promise<{ items: SearchTemplate[]; total: number }> =>
+    request<{ items: SearchTemplate[]; total: number }>("/templates"),
+
+  createTemplate: (payload: CreateTemplateRequest): Promise<SearchTemplate> =>
+    request<SearchTemplate>("/templates", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteTemplate: async (id: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/templates/${id}`, {
+      method: "DELETE",
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        const body = await res.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+      } catch {
+        /* ignore */
+      }
+      throw new ApiError(res.status, detail);
+    }
+  },
 };

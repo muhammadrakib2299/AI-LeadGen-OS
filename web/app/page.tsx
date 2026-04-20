@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError, api, type Job, type JobStatus } from "@/lib/api";
+import {
+  ApiError,
+  api,
+  type Job,
+  type JobStatus,
+  type SearchTemplate,
+} from "@/lib/api";
 
 const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set([
   "succeeded",
@@ -88,6 +94,61 @@ function CreateJobForm({ onCreated }: { onCreated: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState<string | null>(null);
 
+  const [templates, setTemplates] = useState<SearchTemplate[] | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const res = await api.listTemplates();
+      setTemplates(res.items);
+    } catch {
+      // Non-critical; the form still works. Keep templates null on error.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTemplates();
+  }, [refreshTemplates]);
+
+  function applyTemplate(t: SearchTemplate) {
+    setQuery(t.query);
+    setLimit(t.default_limit);
+    setBudget(Number(t.default_budget_cap_usd));
+    setError(null);
+    setJustCreated(null);
+  }
+
+  async function handleSaveTemplate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim() || !saveName.trim()) return;
+    setSaveError(null);
+    try {
+      await api.createTemplate({
+        name: saveName.trim(),
+        query: query.trim(),
+        default_limit: limit,
+        default_budget_cap_usd: budget,
+      });
+      setSaveName("");
+      setSaveOpen(false);
+      void refreshTemplates();
+    } catch (err) {
+      if (err instanceof ApiError) setSaveError(err.detail);
+      else setSaveError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDeleteTemplate(id: string) {
+    try {
+      await api.deleteTemplate(id);
+      void refreshTemplates();
+    } catch {
+      // Silent — a stale template is not worth a blocking dialog.
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
@@ -113,6 +174,38 @@ function CreateJobForm({ onCreated }: { onCreated: () => void }) {
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
       <h2 className="mb-3 text-lg font-medium">New discovery job</h2>
+      {templates && templates.length > 0 && (
+        <div className="mb-4 space-y-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+            Saved templates
+          </div>
+          <ul className="flex flex-wrap gap-2">
+            {templates.map((t) => (
+              <li
+                key={t.id}
+                className="group flex items-center gap-1 rounded-full border border-neutral-300 bg-neutral-50 pl-3 pr-1 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-950"
+              >
+                <button
+                  type="button"
+                  onClick={() => applyTemplate(t)}
+                  className="hover:text-blue-600 dark:hover:text-blue-400"
+                  title={t.query}
+                >
+                  {t.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTemplate(t.id)}
+                  aria-label={`Delete template ${t.name}`}
+                  className="ml-1 rounded-full px-1.5 text-neutral-400 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-950 dark:hover:text-red-300"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-sm font-medium">Query</span>
@@ -152,13 +245,24 @@ function CreateJobForm({ onCreated }: { onCreated: () => void }) {
             />
           </label>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
             disabled={submitting || !query.trim()}
             className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? "Submitting…" : "Submit job"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSaveOpen((open) => !open);
+              setSaveError(null);
+            }}
+            disabled={!query.trim()}
+            className="text-sm text-blue-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400"
+          >
+            {saveOpen ? "Cancel" : "Save as template"}
           </button>
           {error && (
             <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
@@ -170,6 +274,35 @@ function CreateJobForm({ onCreated }: { onCreated: () => void }) {
           )}
         </div>
       </form>
+      {saveOpen && (
+        <form
+          onSubmit={handleSaveTemplate}
+          className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800"
+        >
+          <input
+            type="text"
+            value={saveName}
+            onChange={(e) => setSaveName(e.target.value)}
+            placeholder="Template name (e.g. EU SaaS startups)"
+            required
+            minLength={1}
+            maxLength={128}
+            className="flex-1 min-w-[220px] rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          />
+          <button
+            type="submit"
+            disabled={!saveName.trim() || !query.trim()}
+            className="rounded border border-blue-600 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500 dark:text-blue-300 dark:hover:bg-blue-950"
+          >
+            Save
+          </button>
+          {saveError && (
+            <span className="text-sm text-red-700 dark:text-red-300">
+              {saveError}
+            </span>
+          )}
+        </form>
+      )}
     </section>
   );
 }
