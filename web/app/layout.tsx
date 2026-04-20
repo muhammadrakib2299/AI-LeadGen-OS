@@ -43,6 +43,12 @@ export default function RootLayout({
                 >
                   Review
                 </Link>
+                <Link
+                  href="/blacklist"
+                  className="text-neutral-600 hover:text-blue-600 dark:text-neutral-300 dark:hover:text-blue-400"
+                >
+                  Blacklist
+                </Link>
               </nav>
             </div>
             <span className="text-xs text-neutral-500 dark:text-neutral-400">

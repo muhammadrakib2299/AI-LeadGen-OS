@@ -119,6 +119,25 @@ export interface CreateTemplateRequest {
   default_budget_cap_usd?: number;
 }
 
+export interface BlacklistEntry {
+  id: string;
+  email: string | null;
+  domain: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface BlacklistListResponse {
+  items: BlacklistEntry[];
+  total: number;
+}
+
+export interface CreateBlacklistEntryRequest {
+  email?: string;
+  domain?: string;
+  reason?: string;
+}
+
 export interface CreateDiscoveryJobRequest {
   query: string;
   limit?: number;
@@ -233,20 +252,37 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  deleteTemplate: async (id: string): Promise<void> => {
-    const res = await fetch(`${API_BASE}/templates/${id}`, {
-      method: "DELETE",
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      let detail = res.statusText;
-      try {
-        const body = await res.json();
-        if (typeof body?.detail === "string") detail = body.detail;
-      } catch {
-        /* ignore */
-      }
-      throw new ApiError(res.status, detail);
-    }
+  deleteTemplate: (id: string): Promise<void> => deleteRequest(`/templates/${id}`),
+
+  listBlacklist: (q?: string): Promise<BlacklistListResponse> => {
+    const qs = new URLSearchParams();
+    if (q) qs.set("q", q);
+    const query = qs.toString();
+    return request<BlacklistListResponse>(`/blacklist${query ? `?${query}` : ""}`);
   },
+
+  addBlacklistEntry: (payload: CreateBlacklistEntryRequest): Promise<BlacklistEntry> =>
+    request<BlacklistEntry>("/blacklist", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteBlacklistEntry: (id: string): Promise<void> => deleteRequest(`/blacklist/${id}`),
 };
+
+async function deleteRequest(path: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail);
+  }
+}

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import health, jobs, privacy, review, templates
+from app.api import blacklist, health, jobs, privacy, review, templates
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.sentry import configure_sentry
@@ -49,3 +49,4 @@ app.include_router(privacy.router)
 app.include_router(jobs.router)
 app.include_router(review.router)
 app.include_router(templates.router)
+app.include_router(blacklist.router)
