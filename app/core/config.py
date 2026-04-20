@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     hunter_api_key: str | None = None
     serper_api_key: str | None = None
+    # OpenCorporates is accessible anonymously with a lower rate limit; a key
+    # unlocks the higher tier. See app/services/opencorporates.py.
+    opencorporates_api_key: str | None = None
 
     sentry_dsn: str | None = None
 
