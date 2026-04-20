@@ -73,6 +73,36 @@ export interface ListJobEntitiesParams {
   include_duplicates?: boolean;
 }
 
+export interface ReviewEntity {
+  id: string;
+  job_id: string;
+  job_query: string;
+  name: string;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  category: string | null;
+  quality_score: number | null;
+  review_status: string;
+  field_sources: Record<string, { source?: string; confidence?: number; fetched_at?: string }>;
+  created_at: string;
+}
+
+export interface ReviewListResponse {
+  items: ReviewEntity[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ReviewDecision {
+  id: string;
+  review_status: string;
+}
+
 export interface CreateDiscoveryJobRequest {
   query: string;
   limit?: number;
@@ -160,4 +190,21 @@ export const api = {
 
   exportCsvUrl: (id: string): string =>
     `${API_BASE}/jobs/${id}/export.csv`,
+
+  listReviewQueue: (
+    opts: { limit?: number; offset?: number; job_id?: string } = {},
+  ): Promise<ReviewListResponse> => {
+    const qs = new URLSearchParams();
+    if (opts.limit !== undefined) qs.set("limit", String(opts.limit));
+    if (opts.offset !== undefined) qs.set("offset", String(opts.offset));
+    if (opts.job_id) qs.set("job_id", opts.job_id);
+    const q = qs.toString();
+    return request<ReviewListResponse>(`/review${q ? `?${q}` : ""}`);
+  },
+
+  approveEntity: (entityId: string): Promise<ReviewDecision> =>
+    request<ReviewDecision>(`/review/${entityId}/approve`, { method: "POST" }),
+
+  rejectEntity: (entityId: string): Promise<ReviewDecision> =>
+    request<ReviewDecision>(`/review/${entityId}/reject`, { method: "POST" }),
 };
