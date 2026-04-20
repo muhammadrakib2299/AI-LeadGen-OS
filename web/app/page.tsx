@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, api, type Job, type JobStatus } from "@/lib/api";
 
@@ -192,9 +193,13 @@ function JobsTable({ jobs }: { jobs: Job[] }) {
           {jobs.map((job) => (
             <tr key={job.id}>
               <td className="px-4 py-3">
-                <div className="truncate" title={job.query_raw}>
+                <Link
+                  href={`/jobs/${job.id}`}
+                  className="block truncate font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  title={job.query_raw}
+                >
                   {job.query_raw}
-                </div>
+                </Link>
                 {job.error && (
                   <div
                     className="mt-1 truncate text-xs text-red-700 dark:text-red-300"

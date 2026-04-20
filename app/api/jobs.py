@@ -72,6 +72,31 @@ class JobListResponse(BaseModel):
     offset: int
 
 
+class JobEntity(BaseModel):
+    id: UUID
+    name: str
+    domain: str | None
+    website: str | None
+    email: str | None
+    phone: str | None
+    address: str | None
+    city: str | None
+    country: str | None
+    category: str | None
+    socials: dict[str, Any] | None
+    quality_score: int | None
+    review_status: str
+    field_sources: dict[str, Any]
+    created_at: datetime
+
+
+class JobEntityListResponse(BaseModel):
+    items: list[JobEntity]
+    total: int
+    limit: int
+    offset: int
+
+
 def _to_response(job: Job, entity_count: int) -> JobResponse:
     progress: float | None
     if job.places_discovered > 0:
@@ -373,6 +398,62 @@ async def get_job(
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     return _to_response(job, entity_count=await _count_entities(session, job.id))
+
+
+@router.get("/{job_id}/entities", response_model=JobEntityListResponse)
+async def list_job_entities(
+    job_id: UUID,
+    limit: int = Query(default=25, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    review_status: str | None = Query(default=None),
+    include_duplicates: bool = Query(default=False),
+    session: AsyncSession = Depends(get_session),
+) -> JobEntityListResponse:
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    filters = [Entity.job_id == job_id]
+    if review_status is not None:
+        filters.append(Entity.review_status == review_status)
+    if not include_duplicates:
+        filters.append(Entity.duplicate_of.is_(None))
+
+    total = int(
+        (
+            await session.execute(select(func.count()).select_from(Entity).where(*filters))
+        ).scalar_one()
+    )
+
+    stmt = (
+        select(Entity)
+        .where(*filters)
+        .order_by(Entity.quality_score.desc().nullslast(), Entity.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    entities = (await session.execute(stmt)).scalars().all()
+    items = [
+        JobEntity(
+            id=e.id,
+            name=e.name,
+            domain=e.domain,
+            website=e.website,
+            email=e.email,
+            phone=e.phone,
+            address=e.address,
+            city=e.city,
+            country=e.country,
+            category=e.category,
+            socials=e.socials,
+            quality_score=e.quality_score,
+            review_status=e.review_status,
+            field_sources=e.field_sources or {},
+            created_at=e.created_at,
+        )
+        for e in entities
+    ]
+    return JobEntityListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/{job_id}/export.csv")

@@ -41,6 +41,38 @@ export interface JobListResponse {
   offset: number;
 }
 
+export interface JobEntity {
+  id: string;
+  name: string;
+  domain: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  category: string | null;
+  socials: Record<string, string> | null;
+  quality_score: number | null;
+  review_status: string;
+  field_sources: Record<string, { source?: string; confidence?: number; fetched_at?: string }>;
+  created_at: string;
+}
+
+export interface JobEntityListResponse {
+  items: JobEntity[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListJobEntitiesParams {
+  limit?: number;
+  offset?: number;
+  review_status?: string;
+  include_duplicates?: boolean;
+}
+
 export interface CreateDiscoveryJobRequest {
   query: string;
   limit?: number;
@@ -86,6 +118,19 @@ export const api = {
     request<JobListResponse>(`/jobs?limit=${limit}`),
 
   getJob: (id: string): Promise<Job> => request<Job>(`/jobs/${id}`),
+
+  listJobEntities: (
+    id: string,
+    params: ListJobEntitiesParams = {},
+  ): Promise<JobEntityListResponse> => {
+    const qs = new URLSearchParams();
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    if (params.offset !== undefined) qs.set("offset", String(params.offset));
+    if (params.review_status) qs.set("review_status", params.review_status);
+    if (params.include_duplicates) qs.set("include_duplicates", "true");
+    const q = qs.toString();
+    return request<JobEntityListResponse>(`/jobs/${id}/entities${q ? `?${q}` : ""}`);
+  },
 
   createDiscoveryJob: (payload: CreateDiscoveryJobRequest): Promise<Job> =>
     request<Job>("/jobs", {

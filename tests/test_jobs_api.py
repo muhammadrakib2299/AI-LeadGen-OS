@@ -506,6 +506,133 @@ async def test_post_jobs_bulk_csv_rejects_oversized_upload(
 
 
 @pytest.mark.asyncio
+async def test_list_job_entities_returns_paginated_rows(
+    db_session: AsyncSession, override_session
+) -> None:
+    job = Job(
+        query_raw="cafes in Lisbon",
+        limit=10,
+        budget_cap_usd=1.0,
+        status="succeeded",
+    )
+    db_session.add(job)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Entity(
+                job_id=job.id,
+                name="High Score",
+                domain="high.example.pt",
+                quality_score=90,
+                review_status="approved",
+                field_sources={},
+                external_ids={},
+            ),
+            Entity(
+                job_id=job.id,
+                name="Low Score",
+                domain="low.example.pt",
+                quality_score=40,
+                review_status="review",
+                field_sources={},
+                external_ids={},
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/jobs/{job.id}/entities")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 2
+    assert len(body["items"]) == 2
+    # Highest quality_score first.
+    assert body["items"][0]["name"] == "High Score"
+    assert body["items"][0]["review_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_list_job_entities_filters_by_review_status(
+    db_session: AsyncSession, override_session
+) -> None:
+    job = Job(query_raw="cafes", limit=10, budget_cap_usd=1.0, status="succeeded")
+    db_session.add(job)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Entity(
+                job_id=job.id,
+                name="A",
+                domain="a.example",
+                review_status="approved",
+                field_sources={},
+                external_ids={},
+            ),
+            Entity(
+                job_id=job.id,
+                name="B",
+                domain="b.example",
+                review_status="review",
+                field_sources={},
+                external_ids={},
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/jobs/{job.id}/entities?review_status=review")
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "B"
+
+
+@pytest.mark.asyncio
+async def test_list_job_entities_hides_duplicates_by_default(
+    db_session: AsyncSession, override_session
+) -> None:
+    job = Job(query_raw="cafes", limit=10, budget_cap_usd=1.0, status="succeeded")
+    db_session.add(job)
+    await db_session.flush()
+    winner = Entity(
+        job_id=job.id,
+        name="Winner",
+        domain="winner.example",
+        field_sources={},
+        external_ids={},
+    )
+    db_session.add(winner)
+    await db_session.flush()
+    db_session.add(
+        Entity(
+            job_id=job.id,
+            name="Dup",
+            domain="dup.example",
+            duplicate_of=winner.id,
+            field_sources={},
+            external_ids={},
+        )
+    )
+    await db_session.flush()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/jobs/{job.id}/entities")
+        resp_all = await client.get(f"/jobs/{job.id}/entities?include_duplicates=true")
+    assert resp.json()["total"] == 1
+    assert resp_all.json()["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_list_job_entities_404_when_job_missing(
+    db_session: AsyncSession, override_session
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(f"/jobs/{uuid4()}/entities")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_get_job_progress_is_null_before_discovery(
     db_session: AsyncSession, override_session
 ) -> None:
