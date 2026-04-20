@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, type ReviewEntity } from "@/lib/api";
+import { FreshnessBadge } from "@/components/FreshnessBadge";
 
 const PAGE_SIZE = 20;
 
@@ -158,8 +159,20 @@ export default function ReviewQueuePage() {
               </div>
 
               <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-                <FieldRow label="Email" value={e.email} source={e.field_sources?.email?.source} />
-                <FieldRow label="Phone" value={e.phone} source={e.field_sources?.phone?.source} />
+                <FieldRow
+                  label="Email"
+                  value={e.email}
+                  source={e.field_sources?.email?.source}
+                  field="email"
+                  fieldSources={e.field_sources}
+                />
+                <FieldRow
+                  label="Phone"
+                  value={e.phone}
+                  source={e.field_sources?.phone?.source}
+                  field="phone"
+                  fieldSources={e.field_sources}
+                />
                 <FieldRow
                   label="Location"
                   value={[e.city, e.country].filter(Boolean).join(", ") || null}
@@ -205,10 +218,14 @@ function FieldRow({
   label,
   value,
   source,
+  field,
+  fieldSources,
 }: {
   label: string;
   value: string | null;
   source?: string;
+  field?: string;
+  fieldSources?: ReviewEntity["field_sources"];
 }) {
   return (
     <div className="flex items-baseline gap-2">
@@ -223,6 +240,9 @@ function FieldRow({
         )}
         {value && source && (
           <span className="ml-2 text-xs text-neutral-500">({source})</span>
+        )}
+        {value && field && fieldSources && (
+          <FreshnessBadge fieldSources={fieldSources} field={field} />
         )}
       </dd>
     </div>

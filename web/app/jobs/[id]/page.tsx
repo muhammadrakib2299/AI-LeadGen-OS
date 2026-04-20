@@ -9,6 +9,7 @@ import {
   type JobEntity,
   type JobStatus,
 } from "@/lib/api";
+import { FreshnessBadge } from "@/components/FreshnessBadge";
 
 const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set([
   "succeeded",
@@ -283,15 +284,18 @@ function EntitiesTable({ entities }: { entities: JobEntity[] }) {
               <td className="px-4 py-3">
                 <div className="font-medium">{e.name}</div>
                 {e.website && (
-                  <a
-                    href={e.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
-                    title={e.website}
-                  >
-                    {e.website}
-                  </a>
+                  <div className="flex items-center gap-1">
+                    <a
+                      href={e.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
+                      title={e.website}
+                    >
+                      {e.website}
+                    </a>
+                    <FreshnessBadge fieldSources={e.field_sources} field="website" />
+                  </div>
                 )}
                 {e.category && (
                   <div className="text-xs text-neutral-500">{e.category}</div>
@@ -299,18 +303,24 @@ function EntitiesTable({ entities }: { entities: JobEntity[] }) {
               </td>
               <td className="px-4 py-3">
                 {e.email ? (
-                  <a
-                    href={`mailto:${e.email}`}
-                    className="block truncate text-blue-600 hover:underline dark:text-blue-400"
-                    title={e.email}
-                  >
-                    {e.email}
-                  </a>
+                  <div className="flex items-center gap-1">
+                    <a
+                      href={`mailto:${e.email}`}
+                      className="block truncate text-blue-600 hover:underline dark:text-blue-400"
+                      title={e.email}
+                    >
+                      {e.email}
+                    </a>
+                    <FreshnessBadge fieldSources={e.field_sources} field="email" />
+                  </div>
                 ) : (
                   <span className="text-neutral-400">—</span>
                 )}
                 {e.phone && (
-                  <div className="text-xs text-neutral-500">{e.phone}</div>
+                  <div className="flex items-center gap-1 text-xs text-neutral-500">
+                    <span>{e.phone}</span>
+                    <FreshnessBadge fieldSources={e.field_sources} field="phone" />
+                  </div>
                 )}
               </td>
               <td className="px-4 py-3 text-neutral-700 dark:text-neutral-200">
