@@ -91,12 +91,19 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData uploads must not have Content-Type set manually — the browser
+  // generates it with the multipart boundary.
+  const isFormData =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (!isFormData && !("Content-Type" in headers)) {
+    headers["Content-Type"] = "application/json";
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
+    headers,
     cache: "no-store",
   });
   if (!res.ok) {
@@ -137,6 +144,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  uploadBulkCsv: (
+    file: File,
+    opts: { budget_cap_usd?: number; idempotency_key?: string } = {},
+  ): Promise<Job> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (opts.budget_cap_usd !== undefined) {
+      fd.append("budget_cap_usd", String(opts.budget_cap_usd));
+    }
+    if (opts.idempotency_key) fd.append("idempotency_key", opts.idempotency_key);
+    return request<Job>("/jobs/bulk/csv", { method: "POST", body: fd });
+  },
 
   exportCsvUrl: (id: string): string =>
     `${API_BASE}/jobs/${id}/export.csv`,
