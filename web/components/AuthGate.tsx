@@ -11,7 +11,7 @@ import {
   setStoredUser,
 } from "@/lib/auth";
 
-const PUBLIC_PATHS = new Set<string>(["/login"]);
+const PUBLIC_PATHS = new Set<string>(["/login", "/pricing"]);
 
 /**
  * Client-side auth gate. Blocks rendering until we know whether the user is
