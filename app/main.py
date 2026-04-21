@@ -17,6 +17,7 @@ from app.api import (
     jobs,
     leads,
     privacy,
+    reports,
     reverify,
     review,
     status,
@@ -86,6 +87,7 @@ app.include_router(settings_api.router, dependencies=_auth)
 app.include_router(webhooks.router, dependencies=_auth)
 app.include_router(integrations.router, dependencies=_auth)
 app.include_router(leads.router, dependencies=_auth)
+app.include_router(reports.router, dependencies=_auth)
 # api_keys and billing use get_current_user inside each handler; billing's
 # /webhook is public and authenticates Stripe via signature verification.
 app.include_router(api_keys.router)
