@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
+from app.db.types import EncryptedString
 
 
 class Source(Base, UUIDPKMixin, TimestampMixin):
@@ -97,8 +98,11 @@ class Entity(Base, UUIDPKMixin, TimestampMixin):
     domain: Mapped[str | None] = mapped_column(String(255), index=True)
     website: Mapped[str | None] = mapped_column(Text)
     email: Mapped[str | None] = mapped_column(String(320), index=True)
-    phone: Mapped[str | None] = mapped_column(String(64))
-    address: Mapped[str | None] = mapped_column(Text)
+    # Encrypted at the column level (app/db/types.py). We keep the
+    # declared max length generous enough to fit a Fernet ciphertext of a
+    # reasonable plaintext. See app/core/crypto.py for the on-disk format.
+    phone: Mapped[str | None] = mapped_column(EncryptedString(255))
+    address: Mapped[str | None] = mapped_column(EncryptedString(1024))
     city: Mapped[str | None] = mapped_column(String(128), index=True)
     country: Mapped[str | None] = mapped_column(String(2), index=True)  # ISO 3166-1 alpha-2
 

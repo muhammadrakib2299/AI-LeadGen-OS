@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     # lost, but data minimization is guaranteed. See compliance.md §9.
     compliant_mode: bool = False
 
+    # Column-level encryption for the most sensitive PII (phone, address).
+    # Generate a Fernet key with `python -c "from cryptography.fernet import
+    # Fernet; print(Fernet.generate_key().decode())"`. When unset, write
+    # attempts to encrypted columns raise; reads of pre-existing plaintext
+    # still work. Disk-level encryption on the DB host is the primary
+    # control — this is defense-in-depth for backups and replicas.
+    app_encryption_key: str | None = None
+
     # Auth. JWT_SECRET MUST be set in prod; dev fallback is insecure on purpose
     # so a misconfigured prod deploy fails loudly rather than using a known key.
     jwt_secret: str = "dev-insecure-change-me"  # noqa: S105 — dev placeholder
