@@ -201,14 +201,35 @@ class SearchTemplate(Base, UUIDPKMixin, TimestampMixin):
     __table_args__ = (UniqueConstraint("name", name="uq_search_templates_name"),)
 
 
-class User(Base, UUIDPKMixin, TimestampMixin):
-    """Operator account. Phase 4 is single-tenant; one user == full access.
+class Tenant(Base, UUIDPKMixin, TimestampMixin):
+    """Billing + isolation boundary. Every user belongs to exactly one tenant.
 
-    Multi-tenant isolation is Phase 5; until then, rows are not scoped by user.
+    Phase 5 groundwork: the first user of a tenant is implicitly its owner;
+    team-seat invites (additional users joining an existing tenant) are a
+    separate block. For now, registration creates a tenant per user.
+    """
+
+    __tablename__ = "tenants"
+
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class User(Base, UUIDPKMixin, TimestampMixin):
+    """Operator account. Belongs to exactly one tenant.
+
+    Multi-tenant data scoping across jobs/templates/blacklist lives in a
+    follow-up block; until then, this column enables future row-level
+    tenant filtering without a schema change.
     """
 
     __tablename__ = "users"
 
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

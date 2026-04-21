@@ -20,7 +20,7 @@ from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.security import create_access_token, hash_password, verify_password
-from app.db.models import User
+from app.db.models import Tenant, User
 from app.db.session import get_session
 
 log = get_logger(__name__)
@@ -43,6 +43,7 @@ class UserResponse(BaseModel):
     id: UUID
     email: str
     is_active: bool
+    tenant_id: UUID
 
 
 class TokenResponse(BaseModel):
@@ -73,7 +74,19 @@ async def register(
     db: AsyncSession = Depends(get_session),
 ) -> TokenResponse:
     email = body.email.lower().strip()
-    user = User(email=email, password_hash=hash_password(body.password))
+    # Each registration creates its own tenant. Team-seat invites (adding
+    # users to an existing tenant) will arrive in a follow-up block; for
+    # now, one user == one tenant.
+    domain = email.split("@", 1)[1] if "@" in email else email
+    tenant = Tenant(name=domain)
+    db.add(tenant)
+    await db.flush()
+
+    user = User(
+        email=email,
+        password_hash=hash_password(body.password),
+        tenant_id=tenant.id,
+    )
     db.add(user)
     try:
         await db.commit()
@@ -85,11 +98,21 @@ async def register(
     await db.refresh(user)
     token, expires_at = create_access_token(user.id, user.email)
     _set_session_cookie(response, token, expires_at)
-    log.info("user_registered", user_id=str(user.id), email=email)
+    log.info(
+        "user_registered",
+        user_id=str(user.id),
+        tenant_id=str(user.tenant_id),
+        email=email,
+    )
     return TokenResponse(
         access_token=token,
         expires_at=expires_at,
-        user=UserResponse(id=user.id, email=user.email, is_active=user.is_active),
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            is_active=user.is_active,
+            tenant_id=user.tenant_id,
+        ),
     )
 
 
@@ -116,7 +139,12 @@ async def login(
     return TokenResponse(
         access_token=token,
         expires_at=expires_at,
-        user=UserResponse(id=user.id, email=user.email, is_active=user.is_active),
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            is_active=user.is_active,
+            tenant_id=user.tenant_id,
+        ),
     )
 
 
@@ -129,5 +157,8 @@ async def logout(response: Response) -> Response:
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse(
-        id=current_user.id, email=current_user.email, is_active=current_user.is_active
+        id=current_user.id,
+        email=current_user.email,
+        is_active=current_user.is_active,
+        tenant_id=current_user.tenant_id,
     )

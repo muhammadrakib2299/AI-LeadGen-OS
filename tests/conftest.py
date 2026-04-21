@@ -37,6 +37,7 @@ def override_current_user() -> Iterator[User]:
     """
     fake = User(
         id=uuid4(),
+        tenant_id=uuid4(),
         email="test@example.com",
         password_hash="not-a-real-hash",
         is_active=True,
