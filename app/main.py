@@ -16,6 +16,7 @@ from app.api import (
     privacy,
     reverify,
     review,
+    status,
     templates,
 )
 from app.api.deps import get_current_user
@@ -69,5 +70,6 @@ app.include_router(review.router, dependencies=_auth)
 app.include_router(templates.router, dependencies=_auth)
 app.include_router(blacklist.router, dependencies=_auth)
 app.include_router(reverify.router, dependencies=_auth)
+app.include_router(status.router, dependencies=_auth)
 # api_keys uses get_current_user internally so it can read the caller's id.
 app.include_router(api_keys.router)

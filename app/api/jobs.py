@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.db.models import Entity, Job
+from app.db.models import Entity, Job, RawFetch
 from app.db.session import get_session
 from app.services.export import entities_to_csv
 from app.services.queue import get_redis_pool
@@ -95,6 +95,30 @@ class JobEntityListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class SourceFriction(BaseModel):
+    """Per-source summary of outcomes for this job's raw_fetches.
+
+    `slow_reason` is a plain-language hint the UI can surface — "rate limited"
+    when 429s dominate, "unavailable" for 5xx, "all good" when every call
+    returned 2xx.
+    """
+
+    source: str
+    calls: int
+    success: int
+    rate_limited: int  # 429
+    server_errors: int  # 5xx
+    avg_duration_ms: int | None
+    slow_reason: str | None
+
+
+class JobDiagnosticsResponse(BaseModel):
+    job_id: UUID
+    sources: list[SourceFriction]
+    retry_after_hits: int  # total 429s across all sources
+    summary: str  # one-liner suitable for UI display
 
 
 def _to_response(job: Job, entity_count: int) -> JobResponse:
@@ -454,6 +478,86 @@ async def list_job_entities(
         for e in entities
     ]
     return JobEntityListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/{job_id}/diagnostics", response_model=JobDiagnosticsResponse)
+async def job_diagnostics(
+    job_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> JobDiagnosticsResponse:
+    """Explain why a job ran slow (or why it failed) from the audit log.
+
+    This is a read-only summary of `raw_fetches` rows belonging to the job:
+    counts per source, 429/5xx tallies, and average duration. No retention
+    concerns here — we're only aggregating rows that still exist.
+    """
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    rows = (
+        await session.execute(
+            select(RawFetch).where(RawFetch.job_id == job_id)
+        )
+    ).scalars().all()
+
+    per_source: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        bucket = per_source.setdefault(
+            r.source_slug,
+            {"calls": 0, "success": 0, "rate_limited": 0, "server_errors": 0, "durations": []},
+        )
+        bucket["calls"] += 1
+        status_code = r.response_status or 0
+        if 200 <= status_code < 300:
+            bucket["success"] += 1
+        elif status_code == 429:
+            bucket["rate_limited"] += 1
+        elif status_code >= 500:
+            bucket["server_errors"] += 1
+        if r.duration_ms is not None:
+            bucket["durations"].append(r.duration_ms)
+
+    sources: list[SourceFriction] = []
+    total_429 = 0
+    for slug, b in sorted(per_source.items()):
+        total_429 += b["rate_limited"]
+        durations: list[int] = b["durations"]
+        avg_ms = int(sum(durations) / len(durations)) if durations else None
+        reason: str | None = None
+        if b["rate_limited"] and b["rate_limited"] >= b["success"]:
+            reason = "rate limited — honoring Retry-After"
+        elif b["server_errors"]:
+            reason = "upstream returning 5xx"
+        elif b["calls"] > 0 and b["success"] < b["calls"]:
+            reason = "mixed failures"
+        sources.append(
+            SourceFriction(
+                source=slug,
+                calls=b["calls"],
+                success=b["success"],
+                rate_limited=b["rate_limited"],
+                server_errors=b["server_errors"],
+                avg_duration_ms=avg_ms,
+                slow_reason=reason,
+            )
+        )
+
+    if not sources:
+        summary = "No external calls recorded yet."
+    elif total_429:
+        summary = f"Rate-limited on {total_429} call(s); the pipeline is deliberately waiting."
+    elif any(s.server_errors for s in sources):
+        summary = "One or more sources returned 5xx errors — pipeline retried where safe."
+    else:
+        summary = "All upstream calls succeeded."
+
+    return JobDiagnosticsResponse(
+        job_id=job_id,
+        sources=sources,
+        retry_after_hits=total_429,
+        summary=summary,
+    )
 
 
 @router.get("/{job_id}/export.csv")

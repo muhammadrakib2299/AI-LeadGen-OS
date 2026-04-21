@@ -194,6 +194,37 @@ export interface ReverifyResponse {
   errors: string[];
 }
 
+export type CircuitState = "closed" | "open" | "half_open";
+
+export interface CircuitSnapshot {
+  name: string;
+  state: CircuitState;
+}
+
+export type SystemOverall = "ok" | "degraded" | "impaired";
+
+export interface SystemStatusResponse {
+  overall: SystemOverall;
+  circuits: CircuitSnapshot[];
+}
+
+export interface SourceFriction {
+  source: string;
+  calls: number;
+  success: number;
+  rate_limited: number;
+  server_errors: number;
+  avg_duration_ms: number | null;
+  slow_reason: string | null;
+}
+
+export interface JobDiagnostics {
+  job_id: string;
+  sources: SourceFriction[];
+  retry_after_hits: number;
+  summary: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -361,6 +392,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  getSystemStatus: (): Promise<SystemStatusResponse> =>
+    request<SystemStatusResponse>("/status"),
+
+  getJobDiagnostics: (id: string): Promise<JobDiagnostics> =>
+    request<JobDiagnostics>(`/jobs/${id}/diagnostics`),
 };
 
 async function deleteRequest(path: string): Promise<void> {

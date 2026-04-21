@@ -10,6 +10,7 @@ import {
   type JobStatus,
 } from "@/lib/api";
 import { FreshnessBadge } from "@/components/FreshnessBadge";
+import { JobDiagnosticsPanel } from "@/components/JobDiagnostics";
 
 const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set([
   "succeeded",
@@ -115,6 +116,8 @@ export default function JobDetailPage({
       </div>
 
       <JobHeader job={job} />
+
+      <JobDiagnosticsPanel jobId={id} />
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

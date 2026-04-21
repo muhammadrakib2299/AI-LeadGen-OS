@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthGate } from "@/components/AuthGate";
+import { SystemStatus } from "@/components/SystemStatus";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -58,9 +59,12 @@ export default function RootLayout({
                 </Link>
               </nav>
             </div>
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              EU/UK · GDPR-compliant
-            </span>
+            <div className="flex items-center gap-4">
+              <SystemStatus />
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                EU/UK · GDPR-compliant
+              </span>
+            </div>
           </header>
           <main>
             <AuthGate>{children}</AuthGate>
