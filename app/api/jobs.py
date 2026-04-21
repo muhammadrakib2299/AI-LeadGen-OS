@@ -596,6 +596,91 @@ async def job_diagnostics(
     )
 
 
+class DeliverabilityRow(BaseModel):
+    entity_id: UUID
+    email: str | None
+    verification_status: str | None
+    confidence: float | None
+
+
+class DeliverabilityResponse(BaseModel):
+    job_id: UUID
+    total_entities: int
+    with_email: int
+    valid: int
+    no_mx: int
+    invalid_syntax: int
+    unreachable: int
+    unknown: int
+    sample: list[DeliverabilityRow]
+
+
+@router.get("/{job_id}/deliverability", response_model=DeliverabilityResponse)
+async def deliverability_preview(
+    job_id: UUID,
+    sample_size: int = Query(default=20, ge=0, le=100),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> DeliverabilityResponse:
+    """Bucket the job's entities by email-verification outcome.
+
+    Reads from `field_sources["email"]["verification"]` which Phase 2 already
+    persists. No new verification calls are made — this is a pre-export
+    sanity check, not a re-verify pass (use POST /reverify for that).
+    """
+    job = await _get_job_for_tenant(session, job_id, current_user.tenant_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    entities = (
+        await session.execute(
+            select(Entity)
+            .where(Entity.job_id == job_id, Entity.duplicate_of.is_(None))
+            .order_by(Entity.quality_score.desc().nullslast())
+        )
+    ).scalars().all()
+
+    counts: dict[str, int] = {
+        "valid": 0,
+        "no_mx": 0,
+        "invalid_syntax": 0,
+        "unreachable": 0,
+        "unknown": 0,
+    }
+    with_email = 0
+    sample: list[DeliverabilityRow] = []
+    for e in entities:
+        email_src = (e.field_sources or {}).get("email") or {}
+        verification = email_src.get("verification") or {}
+        status_str = verification.get("status") or "unknown"
+        if e.email:
+            with_email += 1
+        if status_str not in counts:
+            status_str = "unknown"
+        counts[status_str] += 1
+        if len(sample) < sample_size:
+            sample.append(
+                DeliverabilityRow(
+                    entity_id=e.id,
+                    email=e.email,
+                    verification_status=status_str if e.email else None,
+                    confidence=email_src.get("confidence"),
+                )
+            )
+
+    return DeliverabilityResponse(
+        job_id=job_id,
+        total_entities=len(entities),
+        with_email=with_email,
+        valid=counts["valid"],
+        no_mx=counts["no_mx"],
+        invalid_syntax=counts["invalid_syntax"],
+        unreachable=counts["unreachable"],
+        unknown=counts["unknown"],
+        sample=sample,
+    )
+
+
 @router.get("/{job_id}/export.csv")
 async def export_job_csv(
     job_id: UUID,
