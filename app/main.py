@@ -14,6 +14,7 @@ from app.api import (
     blacklist,
     health,
     integrations,
+    invites,
     jobs,
     leads,
     privacy,
@@ -88,6 +89,9 @@ app.include_router(webhooks.router, dependencies=_auth)
 app.include_router(integrations.router, dependencies=_auth)
 app.include_router(leads.router, dependencies=_auth)
 app.include_router(reports.router, dependencies=_auth)
+app.include_router(invites.router, dependencies=_auth)
+# Public part of invites lives on /auth — the bearer of the token IS auth.
+app.include_router(invites.auth_router)
 # api_keys and billing use get_current_user inside each handler; billing's
 # /webhook is public and authenticates Stripe via signature verification.
 app.include_router(api_keys.router)

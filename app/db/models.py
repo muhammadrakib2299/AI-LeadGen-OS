@@ -268,6 +268,33 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class TenantInvite(Base, UUIDPKMixin, TimestampMixin):
+    """Outstanding invitation for someone to join a tenant.
+
+    The token is the only secret; revealed once at create time. Acceptance
+    consumes the row (sets accepted_at) and creates a User under the
+    tenant. Invites expire after 14 days.
+    """
+
+    __tablename__ = "tenant_invites"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    invited_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class HubspotIntegration(Base, UUIDPKMixin, TimestampMixin):
     """Per-tenant HubSpot private-app token.
 
