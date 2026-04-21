@@ -29,6 +29,7 @@ from app.services.places import PlacesClient
 from app.services.quality import review_status_for, score_entity
 from app.services.query_validator import QueryValidator
 from app.services.url_liveness import UrlLiveness, liveness_from_crawl
+from app.services.webhooks import fan_out_event
 
 log = get_logger(__name__)
 
@@ -122,6 +123,27 @@ class JobRunner:
                     # Dedupe is best-effort; never fail a job over it.
                     log.warning("job_dedupe_failed", job_id=str(job.id), error=str(exc))
                 job.status = "succeeded"
+                # Fire outbound webhooks on success. Best-effort — a bad
+                # receiver must not turn a succeeded job into a failed one.
+                try:
+                    await fan_out_event(
+                        self._session,
+                        tenant_id=job.tenant_id,
+                        event_type="job.completed",
+                        payload={
+                            "event": "job.completed",
+                            "job_id": str(job.id),
+                            "tenant_id": str(job.tenant_id),
+                            "status": job.status,
+                            "query_raw": job.query_raw,
+                            "entity_count_hint": job.places_processed,
+                            "cost_usd": float(job.cost_usd),
+                        },
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "job_webhooks_failed", job_id=str(job.id), error=str(exc)
+                    )
 
         except Exception as exc:
             log.exception("job_failed", job_id=str(job.id))

@@ -256,6 +256,51 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class Webhook(Base, UUIDPKMixin, TimestampMixin):
+    """Outbound webhook endpoint configured by a tenant.
+
+    Fires on specific event types (for v1: just 'job.completed'). Payloads
+    are signed with HMAC-SHA256 using `secret` so recipients can verify
+    origin. Disabled webhooks stop receiving events; they're preserved so
+    the UI can still show history.
+    """
+
+    __tablename__ = "webhooks"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Comma-separated event types the hook listens for.
+    events: Mapped[str] = mapped_column(String(255), nullable=False, default="job.completed")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failures_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class WebhookDelivery(Base, UUIDPKMixin, TimestampMixin):
+    """Audit row for one webhook attempt."""
+
+    __tablename__ = "webhook_deliveries"
+
+    webhook_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("webhooks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    # Signed body we POSTed — short-retained for debugging.
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
 class ApiKey(Base, UUIDPKMixin, TimestampMixin):
     """Long-lived programmatic credential. Sent via `X-API-Key` header.
 
