@@ -118,6 +118,18 @@ class Entity(Base, UUIDPKMixin, TimestampMixin):
     quality_score: Mapped[int | None] = mapped_column(Integer, index=True)
     review_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
 
+    # Sales pipeline state, distinct from review_status (which is quality
+    # control). Operator advances this manually as leads move through
+    # outreach. Free-form string with a small intended vocabulary so we
+    # can add states without a migration.
+    lead_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="new", index=True
+    )
+    lead_status_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    lead_notes: Mapped[str | None] = mapped_column(Text)
+
     # When this row is a fuzzy-match duplicate of another entity, points at the
     # winner. Null for kept / standalone rows. See app/services/dedupe.py.
     duplicate_of: Mapped[uuid.UUID | None] = mapped_column(
