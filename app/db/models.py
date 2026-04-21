@@ -268,6 +268,30 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class S3ExportDestination(Base, UUIDPKMixin, TimestampMixin):
+    """Tenant's S3 destination for scheduled / on-demand CSV pushes.
+
+    Credentials are stored in EncryptedString — operators should issue an
+    IAM user with `s3:PutObject` on a single bucket prefix and rotate keys
+    via this table's POST endpoint.
+    """
+
+    __tablename__ = "s3_export_destinations"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    bucket: Mapped[str] = mapped_column(String(255), nullable=False)
+    region: Mapped[str] = mapped_column(String(64), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    access_key_id: Mapped[str] = mapped_column(EncryptedString(255), nullable=False)
+    secret_access_key: Mapped[str] = mapped_column(EncryptedString(1024), nullable=False)
+    last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class TenantInvite(Base, UUIDPKMixin, TimestampMixin):
     """Outstanding invitation for someone to join a tenant.
 
