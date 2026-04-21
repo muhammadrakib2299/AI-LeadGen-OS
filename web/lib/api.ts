@@ -230,6 +230,16 @@ export interface ComplianceSettings {
   jurisdiction: string;
 }
 
+export interface BillingStatus {
+  plan: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+}
+
+export interface CheckoutResponse {
+  checkout_url: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -406,6 +416,12 @@ export const api = {
 
   getComplianceSettings: (): Promise<ComplianceSettings> =>
     request<ComplianceSettings>("/settings/compliance"),
+
+  getBillingStatus: (): Promise<BillingStatus> =>
+    request<BillingStatus>("/billing/status"),
+
+  createBillingCheckout: (): Promise<CheckoutResponse> =>
+    request<CheckoutResponse>("/billing/checkout", { method: "POST" }),
 };
 
 async function deleteRequest(path: string): Promise<void> {

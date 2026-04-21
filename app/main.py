@@ -10,6 +10,7 @@ from app import __version__
 from app.api import (
     api_keys,
     auth,
+    billing,
     blacklist,
     health,
     jobs,
@@ -79,5 +80,7 @@ app.include_router(blacklist.router, dependencies=_auth)
 app.include_router(reverify.router, dependencies=_auth)
 app.include_router(status.router, dependencies=_auth)
 app.include_router(settings_api.router, dependencies=_auth)
-# api_keys uses get_current_user internally so it can read the caller's id.
+# api_keys and billing use get_current_user inside each handler; billing's
+# /webhook is public and authenticates Stripe via signature verification.
 app.include_router(api_keys.router)
+app.include_router(billing.router)

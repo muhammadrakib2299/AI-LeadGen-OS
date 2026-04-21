@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthGate } from "@/components/AuthGate";
+import { BillingBadge } from "@/components/BillingBadge";
 import { ComplianceBadge } from "@/components/ComplianceBadge";
 import { SystemStatus } from "@/components/SystemStatus";
 import "./globals.css";
@@ -61,6 +62,7 @@ export default function RootLayout({
               </nav>
             </div>
             <div className="flex items-center gap-4">
+              <BillingBadge />
               <SystemStatus />
               <ComplianceBadge />
             </div>

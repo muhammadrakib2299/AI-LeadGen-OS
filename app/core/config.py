@@ -73,6 +73,18 @@ class Settings(BaseSettings):
     # to decide whether to install instrumentation at all.
     otel_exporter_otlp_endpoint: str | None = None
 
+    # Stripe billing. Leave unset for local dev; billing endpoints will
+    # return 503 until configured. Use test-mode keys (sk_test_...) in
+    # non-prod environments. The price id is the Stripe recurring price
+    # the "Upgrade" button pushes into a Checkout session.
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None  # noqa: S105 — name, not a secret value
+    stripe_price_id_standard: str | None = None
+    # Where Stripe Checkout redirects on success / cancel. Typically the
+    # dashboard's own URLs.
+    stripe_success_url: str = "http://localhost:3000/?billing=success"
+    stripe_cancel_url: str = "http://localhost:3000/?billing=cancel"
+
     # Auth. JWT_SECRET MUST be set in prod; dev fallback is insecure on purpose
     # so a misconfigured prod deploy fails loudly rather than using a known key.
     jwt_secret: str = "dev-insecure-change-me"  # noqa: S105 — dev placeholder

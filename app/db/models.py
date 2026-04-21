@@ -227,6 +227,12 @@ class Tenant(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "tenants"
 
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    # "free" | "standard" | "past_due" | "canceled". Free is the default
+    # for new tenants; webhook updates move the state. No enum type in the
+    # DB on purpose — lets us add plans without a migration.
+    plan: Mapped[str] = mapped_column(String(32), nullable=False, default="free")
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(128), unique=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(128), unique=True)
 
 
 class User(Base, UUIDPKMixin, TimestampMixin):
