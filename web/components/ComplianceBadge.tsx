@@ -12,9 +12,14 @@ import { getToken } from "@/lib/auth";
  */
 export function ComplianceBadge() {
   const [settings, setSettings] = useState<ComplianceSettings | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) return;
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || !getToken()) return;
     let cancelled = false;
     api
       .getComplianceSettings()
@@ -27,9 +32,9 @@ export function ComplianceBadge() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mounted]);
 
-  if (typeof window !== "undefined" && !getToken()) return null;
+  if (!mounted || !getToken()) return null;
   if (!settings) return null;
 
   return (

@@ -3,14 +3,42 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import {
+  AlertCircle,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Loader2,
+} from "lucide-react";
+import { FreshnessBadge } from "@/components/FreshnessBadge";
+import { JobDiagnosticsPanel } from "@/components/JobDiagnostics";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   ApiError,
   api,
   type Job,
   type JobEntity,
   type JobStatus,
 } from "@/lib/api";
-import { FreshnessBadge } from "@/components/FreshnessBadge";
-import { JobDiagnosticsPanel } from "@/components/JobDiagnostics";
 
 const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set([
   "succeeded",
@@ -19,24 +47,43 @@ const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set([
   "budget_exceeded",
 ]);
 
-const STATUS_STYLE: Record<JobStatus, string> = {
-  pending: "bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200",
-  running: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
-  succeeded: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100",
-  rejected: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100",
-  budget_exceeded: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100",
+type BadgeVariant =
+  | "default"
+  | "secondary"
+  | "destructive"
+  | "success"
+  | "warning"
+  | "outline"
+  | "muted";
+
+const STATUS_VARIANT: Record<JobStatus, BadgeVariant> = {
+  pending: "muted",
+  running: "default",
+  succeeded: "success",
+  failed: "destructive",
+  rejected: "warning",
+  budget_exceeded: "warning",
 };
 
-const REVIEW_STYLE: Record<string, string> = {
-  approved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100",
-  review: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100",
-  duplicate: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
-  pending: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
+const STATUS_LABEL: Record<JobStatus, string> = {
+  pending: "Pending",
+  running: "Running",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  rejected: "Rejected",
+  budget_exceeded: "Budget exceeded",
+};
+
+const REVIEW_VARIANT: Record<string, BadgeVariant> = {
+  approved: "success",
+  review: "warning",
+  rejected: "destructive",
+  duplicate: "muted",
+  pending: "muted",
 };
 
 const PAGE_SIZE = 25;
+const ALL = "__all__";
 
 export default function JobDetailPage({
   params,
@@ -48,7 +95,7 @@ export default function JobDetailPage({
   const [entities, setEntities] = useState<JobEntity[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [reviewFilter, setReviewFilter] = useState<string>("");
+  const [reviewFilter, setReviewFilter] = useState<string>(ALL);
   const [includeDuplicates, setIncludeDuplicates] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +106,7 @@ export default function JobDetailPage({
         api.listJobEntities(id, {
           limit: PAGE_SIZE,
           offset,
-          review_status: reviewFilter || undefined,
+          review_status: reviewFilter === ALL ? undefined : reviewFilter,
           include_duplicates: includeDuplicates,
         }),
       ]);
@@ -87,97 +134,109 @@ export default function JobDetailPage({
   if (error && job === null) {
     return (
       <div className="space-y-4">
-        <Link
-          href="/"
-          className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-        >
-          ← Back to jobs
-        </Link>
-        <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </div>
+        <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5">
+          <Link href="/">
+            <ArrowLeft className="h-4 w-4" />
+            Back to dashboard
+          </Link>
+        </Button>
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="flex items-start gap-3 pt-6 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>{error}</div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   if (job === null) {
-    return <div className="text-sm text-neutral-500">Loading…</div>;
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading job…
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/"
-          className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-        >
-          ← Back to jobs
+      <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5">
+        <Link href="/">
+          <ArrowLeft className="h-4 w-4" />
+          Back to dashboard
         </Link>
-      </div>
+      </Button>
 
       <JobHeader job={job} />
 
       <JobDiagnosticsPanel jobId={id} />
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3">
-            <h2 className="text-lg font-medium">Entities</h2>
-            <span className="text-xs text-neutral-500">
-              {total} total{total > 0 && ` · showing ${offset + 1}–${Math.min(offset + PAGE_SIZE, total)}`}
-            </span>
-            {inFlight && (
-              <span className="text-xs text-blue-600 dark:text-blue-400">
-                refreshing every 2s…
-              </span>
-            )}
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Entities</h2>
+            <p className="text-sm text-muted-foreground">
+              {total} total
+              {total > 0 &&
+                ` · showing ${offset + 1}–${Math.min(offset + PAGE_SIZE, total)}`}
+              {inFlight && " · refreshing every 2s"}
+            </p>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <label className="flex items-center gap-2">
-              <span className="text-neutral-600 dark:text-neutral-300">Review</span>
-              <select
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Review
+              </span>
+              <Select
                 value={reviewFilter}
-                onChange={(e) => {
-                  setReviewFilter(e.target.value);
+                onValueChange={(value) => {
+                  setReviewFilter(value);
                   setOffset(0);
                 }}
-                className="rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950"
               >
-                <option value="">all</option>
-                <option value="approved">approved</option>
-                <option value="review">review</option>
-                <option value="rejected">rejected</option>
-                <option value="pending">pending</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
+                <SelectTrigger className="h-8 w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="review">Review</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
                 checked={includeDuplicates}
-                onChange={(e) => {
-                  setIncludeDuplicates(e.target.checked);
+                onCheckedChange={(checked) => {
+                  setIncludeDuplicates(checked === true);
                   setOffset(0);
                 }}
               />
-              <span className="text-neutral-600 dark:text-neutral-300">
-                include duplicates
-              </span>
+              Include duplicates
             </label>
           </div>
         </div>
 
         {error && (
-          <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-            {error}
-          </div>
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardContent className="flex items-start gap-3 pt-6 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>{error}</div>
+            </CardContent>
+          </Card>
         )}
 
         {entities.length === 0 ? (
-          <div className="rounded border border-neutral-200 bg-white p-5 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
-            {inFlight
-              ? "No entities yet — pipeline is still running."
-              : "No entities match the current filter."}
-          </div>
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              {inFlight
+                ? "No entities yet — pipeline is still running."
+                : "No entities match the current filter."}
+            </CardContent>
+          </Card>
         ) : (
           <EntitiesTable entities={entities} />
         )}
@@ -196,171 +255,195 @@ export default function JobDetailPage({
 }
 
 function JobHeader({ job }: { job: Job }) {
+  const percent = job.progress_percent ?? 0;
   return (
-    <section className="space-y-3 rounded-lg border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            <span
-              className={
-                "inline-block rounded px-2 py-0.5 text-xs font-medium " +
-                STATUS_STYLE[job.status]
-              }
+    <Card>
+      <CardContent className="space-y-5 pt-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant={STATUS_VARIANT[job.status]}>
+                {STATUS_LABEL[job.status]}
+              </Badge>
+              <span>·</span>
+              <span>{formatRelative(job.created_at)}</span>
+            </div>
+            <h2
+              className="break-words text-xl font-semibold tracking-tight"
+              title={job.query_raw}
             >
-              {job.status}
-            </span>
-            <span className="text-xs text-neutral-500">
-              {formatRelative(job.created_at)}
-            </span>
+              {job.query_raw}
+            </h2>
+            {job.error && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>{job.error}</div>
+              </div>
+            )}
           </div>
-          <h2
-            className="break-words text-xl font-medium"
-            title={job.query_raw}
-          >
-            {job.query_raw}
-          </h2>
-          {job.error && (
-            <div className="text-sm text-red-700 dark:text-red-300">{job.error}</div>
+          {job.status === "succeeded" && (
+            <Button asChild className="gap-2">
+              <a href={api.exportCsvUrl(job.id)}>
+                <Download className="h-4 w-4" />
+                Export CSV
+              </a>
+            </Button>
           )}
         </div>
-        {job.status === "succeeded" && (
-          <a
-            href={api.exportCsvUrl(job.id)}
-            className="shrink-0 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-          >
-            Export CSV
-          </a>
-        )}
-      </div>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-        <Field label="Entities" value={String(job.entity_count)} />
-        <Field
-          label="Cost"
-          value={`$${Number(job.cost_usd).toFixed(3)} / $${Number(
-            job.budget_cap_usd,
-          ).toFixed(2)}`}
-        />
-        <Field label="Limit" value={String(job.limit)} />
-        <Field
-          label="Progress"
-          value={
-            job.progress_percent === null
-              ? "—"
-              : `${job.places_processed} / ${job.places_discovered} (${job.progress_percent.toFixed(0)}%)`
-          }
-        />
-      </dl>
-    </section>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+          <Metric label="Entities" value={String(job.entity_count)} />
+          <Metric
+            label="Cost"
+            value={`$${Number(job.cost_usd).toFixed(3)}`}
+            hint={`of $${Number(job.budget_cap_usd).toFixed(2)} cap`}
+          />
+          <Metric label="Limit" value={String(job.limit)} />
+          <Metric
+            label="Progress"
+            value={
+              job.progress_percent === null
+                ? "—"
+                : `${job.places_processed} / ${job.places_discovered}`
+            }
+            hint={
+              job.progress_percent === null
+                ? undefined
+                : `${Math.round(job.progress_percent)}%`
+            }
+          />
+        </div>
+
+        {job.progress_percent !== null && (
+          <Progress
+            value={Math.max(0, Math.min(100, percent))}
+            className="h-1.5"
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-neutral-500">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
-      </dt>
-      <dd className="tabular-nums text-neutral-900 dark:text-neutral-100">
-        {value}
-      </dd>
+      </div>
+      <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
+      {hint && (
+        <div className="text-xs text-muted-foreground">{hint}</div>
+      )}
     </div>
   );
 }
 
 function EntitiesTable({ entities }: { entities: JobEntity[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <table className="min-w-full divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
-        <thead className="bg-neutral-100 text-left text-xs font-medium uppercase tracking-wide text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
-          <tr>
-            <th className="px-4 py-3">Name</th>
-            <th className="px-4 py-3">Contact</th>
-            <th className="px-4 py-3">Location</th>
-            <th className="px-4 py-3">Quality</th>
-            <th className="px-4 py-3">Review</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+    <Card className="overflow-hidden p-0">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Contact</TableHead>
+            <TableHead>Location</TableHead>
+            <TableHead className="w-20 text-right">Quality</TableHead>
+            <TableHead className="w-28">Review</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {entities.map((e) => (
-            <tr key={e.id} className="align-top">
-              <td className="px-4 py-3">
+            <TableRow key={e.id} className="align-top">
+              <TableCell className="max-w-[260px]">
                 <div className="font-medium">{e.name}</div>
                 {e.website && (
-                  <div className="flex items-center gap-1">
+                  <div className="mt-0.5 flex items-center gap-1 text-xs">
                     <a
                       href={e.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block truncate text-xs text-blue-600 hover:underline dark:text-blue-400"
+                      className="max-w-[220px] truncate text-primary hover:underline"
                       title={e.website}
                     >
                       {e.website}
                     </a>
-                    <FreshnessBadge fieldSources={e.field_sources} field="website" />
+                    <FreshnessBadge
+                      fieldSources={e.field_sources}
+                      field="website"
+                    />
                   </div>
                 )}
                 {e.category && (
-                  <div className="text-xs text-neutral-500">{e.category}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {e.category}
+                  </div>
                 )}
-              </td>
-              <td className="px-4 py-3">
+              </TableCell>
+              <TableCell className="max-w-[240px]">
                 {e.email ? (
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 text-sm">
                     <a
                       href={`mailto:${e.email}`}
-                      className="block truncate text-blue-600 hover:underline dark:text-blue-400"
+                      className="max-w-[200px] truncate text-primary hover:underline"
                       title={e.email}
                     >
                       {e.email}
                     </a>
-                    <FreshnessBadge fieldSources={e.field_sources} field="email" />
+                    <FreshnessBadge
+                      fieldSources={e.field_sources}
+                      field="email"
+                    />
                   </div>
                 ) : (
-                  <span className="text-neutral-400">—</span>
+                  <span className="text-muted-foreground">—</span>
                 )}
                 {e.phone && (
-                  <div className="flex items-center gap-1 text-xs text-neutral-500">
+                  <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                     <span>{e.phone}</span>
-                    <FreshnessBadge fieldSources={e.field_sources} field="phone" />
+                    <FreshnessBadge
+                      fieldSources={e.field_sources}
+                      field="phone"
+                    />
                   </div>
                 )}
-              </td>
-              <td className="px-4 py-3 text-neutral-700 dark:text-neutral-200">
+              </TableCell>
+              <TableCell className="max-w-[220px] text-sm">
                 {e.city || e.country ? (
-                  <div>
-                    {[e.city, e.country].filter(Boolean).join(", ")}
-                  </div>
+                  <div>{[e.city, e.country].filter(Boolean).join(", ")}</div>
                 ) : (
-                  <span className="text-neutral-400">—</span>
+                  <span className="text-muted-foreground">—</span>
                 )}
                 {e.address && (
                   <div
-                    className="truncate text-xs text-neutral-500"
+                    className="mt-0.5 truncate text-xs text-muted-foreground"
                     title={e.address}
                   >
                     {e.address}
                   </div>
                 )}
-              </td>
-              <td className="px-4 py-3 tabular-nums">
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
                 {e.quality_score ?? "—"}
-              </td>
-              <td className="px-4 py-3">
-                <span
-                  className={
-                    "inline-block rounded px-2 py-0.5 text-xs font-medium " +
-                    (REVIEW_STYLE[e.review_status] ?? REVIEW_STYLE.pending)
-                  }
-                >
+              </TableCell>
+              <TableCell>
+                <Badge variant={REVIEW_VARIANT[e.review_status] ?? "muted"}>
                   {e.review_status}
-                </span>
-              </td>
-            </tr>
+                </Badge>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
 
@@ -378,23 +461,25 @@ function Pagination({
   const hasPrev = offset > 0;
   const hasNext = offset + pageSize < total;
   return (
-    <div className="flex items-center justify-end gap-2 text-sm">
-      <button
-        type="button"
+    <div className="flex items-center justify-end gap-2">
+      <Button
+        variant="outline"
+        size="sm"
         disabled={!hasPrev}
         onClick={() => onChange(Math.max(0, offset - pageSize))}
-        className="rounded border border-neutral-300 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700"
       >
+        <ChevronLeft className="h-4 w-4" />
         Previous
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
         disabled={!hasNext}
         onClick={() => onChange(offset + pageSize)}
-        className="rounded border border-neutral-300 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700"
       >
         Next
-      </button>
+        <ChevronRight className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
@@ -411,4 +496,3 @@ function formatRelative(iso: string): string {
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
 }
-

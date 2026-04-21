@@ -26,9 +26,14 @@ const LABEL: Record<string, { text: string; cls: string }> = {
 export function BillingBadge() {
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [upgrading, setUpgrading] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) return;
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || !getToken()) return;
     let cancelled = false;
     api
       .getBillingStatus()
@@ -41,7 +46,7 @@ export function BillingBadge() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mounted]);
 
   async function handleUpgrade() {
     setUpgrading(true);
@@ -56,7 +61,7 @@ export function BillingBadge() {
     }
   }
 
-  if (typeof window !== "undefined" && !getToken()) return null;
+  if (!mounted || !getToken()) return null;
   if (!status) return null;
 
   const label = LABEL[status.plan] ?? LABEL.free;

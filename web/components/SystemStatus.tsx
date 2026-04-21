@@ -28,11 +28,19 @@ const LABEL: Record<SystemOverall, string> = {
 export function SystemStatus() {
   const [status, setStatus] = useState<SystemStatusResponse | null>(null);
   const [open, setOpen] = useState(false);
+  // Defer auth-aware rendering until after mount so SSR and the first
+  // client render match (getToken() reads localStorage, which is only
+  // defined on the client).
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     // Skip while unauthenticated — /status is gated, and polling it from
     // the login page would produce a noisy stream of 401s.
-    if (!getToken()) return;
+    if (!mounted || !getToken()) return;
     let cancelled = false;
     async function fetchOnce() {
       try {
@@ -48,10 +56,10 @@ export function SystemStatus() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [mounted]);
 
   // Hide entirely when unauthenticated — less visual noise on the login page.
-  if (typeof window !== "undefined" && !getToken()) return null;
+  if (!mounted || !getToken()) return null;
 
   if (!status) {
     return (
