@@ -17,8 +17,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
-from app.db.models import Blacklist
+from app.db.models import Blacklist, User
 from app.db.session import get_session
 
 log = get_logger(__name__)
@@ -66,11 +67,17 @@ def _to_response(row: Blacklist) -> BlacklistResponse:
 async def add_to_blacklist(
     payload: BlacklistCreateRequest,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> BlacklistResponse:
     email = str(payload.email).lower() if payload.email else None
     domain = payload.domain.strip().lower() if payload.domain else None
 
-    entry = Blacklist(email=email, domain=domain, reason=payload.reason)
+    entry = Blacklist(
+        tenant_id=current_user.tenant_id,
+        email=email,
+        domain=domain,
+        reason=payload.reason,
+    )
     session.add(entry)
     try:
         await session.commit()
@@ -96,8 +103,9 @@ async def list_blacklist(
     offset: int = Query(default=0, ge=0),
     q: str | None = Query(default=None, description="substring match on email or domain"),
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> BlacklistListResponse:
-    filters = []
+    filters = [Blacklist.tenant_id == current_user.tenant_id]
     if q:
         pattern = f"%{q.lower()}%"
         filters.append(
@@ -122,8 +130,13 @@ async def list_blacklist(
 async def remove_from_blacklist(
     entry_id: UUID,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> Response:
-    entry = await session.get(Blacklist, entry_id)
+    stmt = select(Blacklist).where(
+        Blacklist.id == entry_id,
+        Blacklist.tenant_id == current_user.tenant_id,
+    )
+    entry = (await session.execute(stmt)).scalar_one_or_none()
     if entry is None:
         raise HTTPException(status_code=404, detail="blacklist entry not found")
 

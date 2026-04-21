@@ -18,8 +18,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
-from app.db.models import Entity, Job, RawFetch
+from app.db.models import Entity, Job, RawFetch, User
 from app.db.session import get_session
 from app.services.export import entities_to_csv
 from app.services.queue import get_redis_pool
@@ -154,6 +155,17 @@ async def _count_entities(session: AsyncSession, job_id: UUID) -> int:
     return int((await session.execute(stmt)).scalar_one())
 
 
+async def _get_job_for_tenant(
+    session: AsyncSession, job_id: UUID, tenant_id: UUID
+) -> Job | None:
+    """Fetch a job belonging to `tenant_id`, or None. Used in place of
+    `session.get(Job, id)` everywhere we want tenant-scoped access — a
+    foreign-tenant lookup must 404, never 403, so we don't leak existence.
+    """
+    stmt = select(Job).where(Job.id == job_id, Job.tenant_id == tenant_id)
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 async def _run_in_background(job_id: UUID) -> None:
     """Enqueue the job to arq. A separate worker process runs the pipeline.
 
@@ -169,16 +181,20 @@ async def create_job(
     payload: JobCreateRequest,
     response: Response,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> JobResponse:
     if payload.idempotency_key:
+        # Idempotency is scoped per-tenant so two tenants can safely use the
+        # same upstream key (e.g. n8n workflow IDs) without colliding.
         existing = (
             await session.execute(
-                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+                select(Job).where(
+                    Job.idempotency_key == payload.idempotency_key,
+                    Job.tenant_id == current_user.tenant_id,
+                )
             )
         ).scalar_one_or_none()
         if existing is not None:
-            # Return the prior job verbatim — classic idempotency semantics.
-            # Caller's retry is safe: no new work, no new enqueue.
             response.status_code = 200
             log.info(
                 "job_idempotent_hit",
@@ -190,6 +206,7 @@ async def create_job(
             )
 
     job = Job(
+        tenant_id=current_user.tenant_id,
         query_raw=payload.query,
         limit=payload.limit,
         budget_cap_usd=payload.budget_cap_usd,
@@ -200,12 +217,13 @@ async def create_job(
     try:
         await session.commit()
     except IntegrityError:
-        # Race: a concurrent request with the same idempotency_key committed
-        # first and claimed the unique slot. Rewind and return the winner.
         await session.rollback()
         existing = (
             await session.execute(
-                select(Job).where(Job.idempotency_key == payload.idempotency_key)
+                select(Job).where(
+                    Job.idempotency_key == payload.idempotency_key,
+                    Job.tenant_id == current_user.tenant_id,
+                )
             )
         ).scalar_one()
         response.status_code = 200
@@ -240,6 +258,7 @@ async def create_bulk_job(
     payload: BulkJobCreateRequest,
     response: Response,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> JobResponse:
     seeds = _seeds_from_json(payload.entities)
     return await _create_bulk_job(
@@ -248,6 +267,7 @@ async def create_bulk_job(
         seeds=seeds,
         budget_cap_usd=payload.budget_cap_usd,
         idempotency_key=payload.idempotency_key,
+        tenant_id=current_user.tenant_id,
     )
 
 
@@ -258,6 +278,7 @@ async def create_bulk_job_from_csv(
     budget_cap_usd: float = Form(default=5.0, gt=0, le=100.0),
     idempotency_key: str | None = Form(default=None, min_length=8, max_length=128),
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> JobResponse:
     raw = await file.read(MAX_CSV_BYTES + 1)
     if len(raw) > MAX_CSV_BYTES:
@@ -269,6 +290,7 @@ async def create_bulk_job_from_csv(
         seeds=seeds,
         budget_cap_usd=budget_cap_usd,
         idempotency_key=idempotency_key,
+        tenant_id=current_user.tenant_id,
     )
 
 
@@ -339,11 +361,15 @@ async def _create_bulk_job(
     seeds: list[dict[str, Any]],
     budget_cap_usd: float,
     idempotency_key: str | None,
+    tenant_id: UUID,
 ) -> JobResponse:
     if idempotency_key:
         existing = (
             await session.execute(
-                select(Job).where(Job.idempotency_key == idempotency_key)
+                select(Job).where(
+                    Job.idempotency_key == idempotency_key,
+                    Job.tenant_id == tenant_id,
+                )
             )
         ).scalar_one_or_none()
         if existing is not None:
@@ -353,6 +379,7 @@ async def _create_bulk_job(
             )
 
     job = Job(
+        tenant_id=tenant_id,
         query_raw=f"bulk_enrichment({len(seeds)} entities)",
         limit=len(seeds),
         budget_cap_usd=budget_cap_usd,
@@ -368,7 +395,10 @@ async def _create_bulk_job(
         await session.rollback()
         existing = (
             await session.execute(
-                select(Job).where(Job.idempotency_key == idempotency_key)
+                select(Job).where(
+                    Job.idempotency_key == idempotency_key,
+                    Job.tenant_id == tenant_id,
+                )
             )
         ).scalar_one()
         response.status_code = 200
@@ -387,8 +417,11 @@ async def list_jobs(
     offset: int = Query(default=0, ge=0),
     status: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> JobListResponse:
-    filters = [Job.status == status] if status else []
+    filters = [Job.tenant_id == current_user.tenant_id]
+    if status:
+        filters.append(Job.status == status)
 
     total = int(
         (await session.execute(select(func.count()).select_from(Job).where(*filters))).scalar_one()
@@ -417,8 +450,9 @@ async def list_jobs(
 async def get_job(
     job_id: UUID,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> JobResponse:
-    job = await session.get(Job, job_id)
+    job = await _get_job_for_tenant(session, job_id, current_user.tenant_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     return _to_response(job, entity_count=await _count_entities(session, job.id))
@@ -432,8 +466,9 @@ async def list_job_entities(
     review_status: str | None = Query(default=None),
     include_duplicates: bool = Query(default=False),
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> JobEntityListResponse:
-    job = await session.get(Job, job_id)
+    job = await _get_job_for_tenant(session, job_id, current_user.tenant_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
 
@@ -484,6 +519,7 @@ async def list_job_entities(
 async def job_diagnostics(
     job_id: UUID,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> JobDiagnosticsResponse:
     """Explain why a job ran slow (or why it failed) from the audit log.
 
@@ -491,7 +527,7 @@ async def job_diagnostics(
     counts per source, 429/5xx tallies, and average duration. No retention
     concerns here — we're only aggregating rows that still exist.
     """
-    job = await session.get(Job, job_id)
+    job = await _get_job_for_tenant(session, job_id, current_user.tenant_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
 
@@ -565,8 +601,9 @@ async def export_job_csv(
     job_id: UUID,
     include_rejected: bool = Query(default=False),
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> Response:
-    job = await session.get(Job, job_id)
+    job = await _get_job_for_tenant(session, job_id, current_user.tenant_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     if job.status in {"pending", "running"}:

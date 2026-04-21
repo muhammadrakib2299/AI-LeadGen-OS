@@ -196,7 +196,7 @@ class JobRunner:
     ) -> None:
         domain = _domain_of(place.website_uri)
 
-        if await is_blacklisted(self._session, domain=domain):
+        if await is_blacklisted(self._session, domain=domain, tenant_id=job.tenant_id):
             log.info("job_place_skipped_blacklisted", job_id=str(job.id), domain=domain)
             return
 
@@ -204,7 +204,9 @@ class JobRunner:
         contacts = await self._extractor.extract(pages)
 
         primary_email = contacts.emails[0] if contacts.emails else None
-        if primary_email and await is_blacklisted(self._session, email=primary_email):
+        if primary_email and await is_blacklisted(
+            self._session, email=primary_email, tenant_id=job.tenant_id
+        ):
             log.info("job_place_skipped_blacklisted_email", job_id=str(job.id), email=primary_email)
             return
 

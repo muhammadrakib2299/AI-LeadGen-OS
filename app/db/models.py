@@ -51,6 +51,12 @@ class Job(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "jobs"
 
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
     # 'discovery' = NL query → Places search; 'bulk_enrichment' = client-supplied list.
     job_type: Mapped[str] = mapped_column(String(32), nullable=False, default="discovery")
@@ -191,6 +197,12 @@ class SearchTemplate(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "search_templates"
 
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     query: Mapped[str] = mapped_column(Text, nullable=False)
     default_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
@@ -198,7 +210,10 @@ class SearchTemplate(Base, UUIDPKMixin, TimestampMixin):
         Numeric(10, 4), nullable=False, default=5.0
     )
 
-    __table_args__ = (UniqueConstraint("name", name="uq_search_templates_name"),)
+    # Template names are unique per tenant, not globally.
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_search_templates_tenant_name"),
+    )
 
 
 class Tenant(Base, UUIDPKMixin, TimestampMixin):
@@ -268,11 +283,26 @@ class Blacklist(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "blacklist"
 
+    # GDPR subject requests arriving via /privacy/opt-out have no tenant
+    # context — they apply to the tenant whose pipeline surfaced the
+    # address. We resolve that at write time: opt-out POSTs for a domain
+    # fan out to every tenant that currently holds data for it. See
+    # app/services/blacklist.py. For tenant-authored entries the column
+    # holds the calling tenant directly.
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     email: Mapped[str | None] = mapped_column(String(320), index=True)
     domain: Mapped[str | None] = mapped_column(String(255), index=True)
     reason: Mapped[str | None] = mapped_column(Text)
 
+    # Uniqueness is now scoped per tenant — two tenants can each blacklist
+    # the same address independently (an opt-out request to Tenant A
+    # shouldn't force-remove a B2B lead from Tenant B's pipeline).
     __table_args__ = (
-        UniqueConstraint("email", name="uq_blacklist_email"),
-        UniqueConstraint("domain", name="uq_blacklist_domain"),
+        UniqueConstraint("tenant_id", "email", name="uq_blacklist_tenant_email"),
+        UniqueConstraint("tenant_id", "domain", name="uq_blacklist_tenant_domain"),
     )

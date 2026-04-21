@@ -11,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
-from app.db.models import SearchTemplate
+from app.db.models import SearchTemplate, User
 from app.db.session import get_session
 
 log = get_logger(__name__)
@@ -55,8 +56,10 @@ def _to_response(t: SearchTemplate) -> TemplateResponse:
 async def create_template(
     payload: TemplateCreateRequest,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> TemplateResponse:
     template = SearchTemplate(
+        tenant_id=current_user.tenant_id,
         name=payload.name,
         query=payload.query,
         default_limit=payload.default_limit,
@@ -78,8 +81,13 @@ async def create_template(
 @router.get("", response_model=TemplateListResponse)
 async def list_templates(
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> TemplateListResponse:
-    stmt = select(SearchTemplate).order_by(SearchTemplate.created_at.desc())
+    stmt = (
+        select(SearchTemplate)
+        .where(SearchTemplate.tenant_id == current_user.tenant_id)
+        .order_by(SearchTemplate.created_at.desc())
+    )
     rows = (await session.execute(stmt)).scalars().all()
     return TemplateListResponse(items=[_to_response(t) for t in rows], total=len(rows))
 
@@ -88,8 +96,15 @@ async def list_templates(
 async def delete_template(
     template_id: UUID,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ) -> Response:
-    template = await session.get(SearchTemplate, template_id)
+    # Fetch with tenant-scope so foreign-tenant templates return 404, not 403.
+    # Surfacing existence of a row would leak cross-tenant info.
+    stmt = select(SearchTemplate).where(
+        SearchTemplate.id == template_id,
+        SearchTemplate.tenant_id == current_user.tenant_id,
+    )
+    template = (await session.execute(stmt)).scalar_one_or_none()
     if template is None:
         raise HTTPException(status_code=404, detail="template not found")
     await session.delete(template)
