@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # OpenCorporates is accessible anonymously with a lower rate limit; a key
     # unlocks the higher tier. See app/services/opencorporates.py.
     opencorporates_api_key: str | None = None
+    # Yelp Fusion API key (Authorization: Bearer). Enables the YelpAdapter
+    # fallback in the discovery router; see app/services/yelp.py.
+    yelp_api_key: str | None = None
 
     sentry_dsn: str | None = None
 

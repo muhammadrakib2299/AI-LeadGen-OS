@@ -44,6 +44,7 @@ Target geography: **EU + UK**.
 - **ToS:** [Yelp API ToS](https://docs.developer.yelp.com/docs/fusion-api-terms-of-use). Attribution required. Cannot store Yelp data for more than **24 hours** except the Yelp ID.
 - **Coverage:** mediocre in much of continental EU, good in UK/Ireland.
 - **Our use:** Phase 3 — fallback for hospitality / consumer categories in UK.
+- **Enforcement:** the 24h limit is enforced in code — `scripts/retention_sweep.py` nulls `raw_fetches.payload` for Yelp rows older than 24h, and `YelpAdapter` deliberately discards Yelp-curated fields (rating, review count, category taxonomy, price tier, photos) before handing results to the pipeline. Only objective facts (name, address, phone, coordinates) and the Yelp business ID reach the entity table.
 
 ### Foursquare Places API
 - **What:** business listings, categories, location.

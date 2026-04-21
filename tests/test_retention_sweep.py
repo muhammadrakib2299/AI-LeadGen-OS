@@ -48,6 +48,48 @@ async def test_sweep_deletes_old_raw_fetches_only(db_session: AsyncSession) -> N
 
 
 @pytest.mark.asyncio
+async def test_sweep_nulls_yelp_payload_after_24h_but_keeps_row(
+    db_session: AsyncSession,
+) -> None:
+    job = Job(query_raw="q", limit=1, budget_cap_usd=1.0, status="succeeded")
+    db_session.add(job)
+    await db_session.flush()
+
+    now = datetime.now(UTC)
+    fresh = RawFetch(
+        job_id=job.id,
+        source_slug="yelp",
+        url="https://api.yelp.com/v3/businesses/search?term=pizza&location=Paris",
+        created_at=now - timedelta(hours=2),
+        updated_at=now - timedelta(hours=2),
+        payload={"businesses": [{"id": "fresh"}]},
+    )
+    stale = RawFetch(
+        job_id=job.id,
+        source_slug="yelp",
+        url="https://api.yelp.com/v3/businesses/search?term=pizza&location=Berlin",
+        created_at=now - timedelta(hours=48),
+        updated_at=now - timedelta(hours=48),
+        payload={"businesses": [{"id": "stale"}]},
+    )
+    db_session.add_all([fresh, stale])
+    await db_session.flush()
+
+    counts = await sweep(db_session, dry_run=False)
+    assert counts["yelp_payload_nulled"] == 1
+
+    rows = (
+        (await db_session.execute(select(RawFetch).where(RawFetch.job_id == job.id)))
+        .scalars()
+        .all()
+    )
+    # Row is preserved for audit; payload is nulled for the stale one only.
+    by_url = {r.url: r for r in rows}
+    assert by_url[fresh.url].payload == {"businesses": [{"id": "fresh"}]}
+    assert by_url[stale.url].payload is None
+
+
+@pytest.mark.asyncio
 async def test_sweep_dry_run_does_not_delete(db_session: AsyncSession) -> None:
     job = Job(query_raw="q", limit=1, budget_cap_usd=1.0, status="succeeded")
     db_session.add(job)

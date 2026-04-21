@@ -14,10 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.extractors.contacts import ContactsExtractor
 from app.services.crawler import Crawler
+from app.services.discovery import PlacesAdapter, SmartRouter, YelpAdapter
 from app.services.job_runner import JobRunner
 from app.services.llm import AnthropicClient, LLMClient
 from app.services.places import PlacesClient
 from app.services.query_validator import QueryValidator
+from app.services.yelp import YelpClient
 
 
 async def make_production_runner(
@@ -31,6 +33,15 @@ async def make_production_runner(
     places = PlacesClient(http=http, api_key=settings.google_places_api_key, session=session)
     crawler = Crawler(http=http, session=session)
 
+    # Compose discovery adapters: Places is primary; Yelp is an optional
+    # fallback, enabled only when a key is configured.
+    adapters = [PlacesAdapter(places)]
+    yelp: YelpClient | None = None
+    if settings.yelp_api_key:
+        yelp = YelpClient(http=http, api_key=settings.yelp_api_key, session=session)
+        adapters.append(YelpAdapter(yelp))
+    router = SmartRouter(adapters)
+
     llm: LLMClient | None = None
     if settings.anthropic_api_key:
         llm = AnthropicClient(api_key=settings.anthropic_api_key)
@@ -43,7 +54,7 @@ async def make_production_runner(
 
     runner = JobRunner(
         validator=validator,
-        places=places,
+        router=router,
         crawler=crawler,
         extractor=extractor,
         session=session,

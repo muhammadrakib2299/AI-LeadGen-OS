@@ -20,7 +20,10 @@ from uuid import UUID
 from app.core.circuit import CircuitOpenError
 from app.core.logging import get_logger
 from app.models.places import Place
+from app.models.yelp import YelpBusiness
 from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
+from app.services.yelp import SEARCH_COST_USD as YELP_SEARCH_COST_USD
+from app.services.yelp import YelpClient
 
 log = get_logger(__name__)
 
@@ -69,6 +72,105 @@ class PlacesAdapter:
             max_results=max_results,
             job_id=job_id,
         )
+
+
+class YelpAdapter:
+    """Yelp Fusion fallback. Maps Yelp businesses to the common `Place` shape.
+
+    Only objective, widely-available facts (name, address, phone, coords,
+    city, country) are carried over. Yelp-curated content (rating, review
+    count, category taxonomy, price tier) is intentionally dropped so it
+    never reaches the entities table — see app/services/yelp.py for the
+    full ToS rationale. The Yelp business ID is prefixed with `yelp:` so
+    downstream code can tell it apart from Google `place_id`s.
+    """
+
+    name = "yelp"
+    cost_per_call_usd = YELP_SEARCH_COST_USD
+
+    def __init__(self, client: YelpClient) -> None:
+        self._client = client
+
+    async def search(
+        self,
+        query: str,
+        *,
+        region_code: str | None,
+        max_results: int,
+        job_id: UUID | None,
+    ) -> list[Place]:
+        # Yelp requires an anchor — free-form location text works for the
+        # major cities EU/UK operators target. If the router hands us a
+        # bare query without a location, skip rather than error so the next
+        # adapter (or caller) can try instead.
+        location_hint = _location_hint_from_query(query, region_code)
+        if not location_hint:
+            log.info("yelp_adapter_skipped_no_location", query=query)
+            return []
+        businesses = await self._client.search_businesses(
+            term=_term_from_query(query),
+            location=location_hint,
+            max_results=max_results,
+            job_id=job_id,
+        )
+        return [_yelp_to_place(b) for b in businesses]
+
+
+def _term_from_query(query: str) -> str:
+    # If the caller supplied "restaurants in Paris", strip the trailing
+    # "in Paris" so Yelp's `term` parameter doesn't double-specify location.
+    lowered = query.lower()
+    idx = lowered.rfind(" in ")
+    if idx > 0:
+        return query[:idx].strip()
+    return query.strip()
+
+
+def _location_hint_from_query(query: str, region_code: str | None) -> str | None:
+    lowered = query.lower()
+    idx = lowered.rfind(" in ")
+    if idx > 0:
+        loc = query[idx + 4 :].strip(" ,")
+        if loc:
+            return loc
+    return region_code
+
+
+def _yelp_to_place(b: YelpBusiness) -> Place:
+    # Construct a Place via its alias-accepting model so validation matches
+    # what Google Places' pipeline expects downstream.
+    location = b.location
+    city = location.city if location else None
+    country = location.country if location else None
+    address_components: list[dict[str, object]] = []
+    if city:
+        address_components.append(
+            {"longText": city, "shortText": city, "types": ["locality"]}
+        )
+    if country:
+        address_components.append(
+            {
+                "longText": country,
+                "shortText": country,
+                "types": ["country"],
+            }
+        )
+    coords: dict[str, float] | None = None
+    if b.coordinates and b.coordinates.latitude is not None and b.coordinates.longitude is not None:
+        coords = {"latitude": b.coordinates.latitude, "longitude": b.coordinates.longitude}
+
+    return Place.model_validate(
+        {
+            "id": f"yelp:{b.id}",
+            "displayName": {"text": b.name, "languageCode": None},
+            "formattedAddress": b.formatted_address,
+            "addressComponents": address_components,
+            "location": coords,
+            "types": [],
+            "nationalPhoneNumber": b.display_phone,
+            "internationalPhoneNumber": b.phone,
+        }
+    )
 
 
 class AllAdaptersDownError(Exception):

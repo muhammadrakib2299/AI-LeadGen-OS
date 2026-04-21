@@ -6,6 +6,12 @@ Deletes:
 - entities that have not been re-verified in 24 months and are not on the blacklist
   (blacklist entries are permanent)
 
+Source-specific rules:
+- Yelp raw_fetches: the Yelp Fusion ToS forbids storing API-returned data
+  beyond 24 hours except the business ID. We null out `payload` (keeping
+  URL / status / content_hash for audit) after 24h, and delete the whole
+  row at the usual 90-day audit boundary.
+
 Safe to run repeatedly. Intended to be wired into a daily cron:
     uv run python scripts/retention_sweep.py
 
@@ -19,7 +25,7 @@ import argparse
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import configure_logging, get_logger
@@ -29,12 +35,18 @@ from app.db.session import session_scope
 RAW_FETCHES_TTL = timedelta(days=90)
 EXPORTS_TTL = timedelta(days=30)
 ENTITIES_TTL = timedelta(days=365 * 2)
+YELP_PAYLOAD_TTL = timedelta(hours=24)  # Yelp Fusion ToS.
 
 
 async def sweep(session: AsyncSession, *, dry_run: bool) -> dict[str, int]:
     now = datetime.now(UTC)
     results: dict[str, int] = {}
 
+    results["yelp_payload_nulled"] = await _null_yelp_payload(
+        session,
+        cutoff=now - YELP_PAYLOAD_TTL,
+        dry_run=dry_run,
+    )
     results["raw_fetches"] = await _purge(
         session,
         table=RawFetch,
@@ -57,6 +69,31 @@ async def sweep(session: AsyncSession, *, dry_run: bool) -> dict[str, int]:
         dry_run=dry_run,
     )
     return results
+
+
+async def _null_yelp_payload(session: AsyncSession, *, cutoff: datetime, dry_run: bool) -> int:
+    count_stmt = (
+        select(func.count())
+        .select_from(RawFetch)
+        .where(
+            RawFetch.source_slug == "yelp",
+            RawFetch.created_at < cutoff,
+            RawFetch.payload.is_not(None),
+        )
+    )
+    count = int((await session.execute(count_stmt)).scalar_one())
+    if dry_run or count == 0:
+        return count
+    await session.execute(
+        update(RawFetch)
+        .where(
+            RawFetch.source_slug == "yelp",
+            RawFetch.created_at < cutoff,
+            RawFetch.payload.is_not(None),
+        )
+        .values(payload=None)
+    )
+    return count
 
 
 async def _purge(session: AsyncSession, *, table, cutoff: datetime, column, dry_run: bool) -> int:
