@@ -210,6 +210,31 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class ApiKey(Base, UUIDPKMixin, TimestampMixin):
+    """Long-lived programmatic credential. Sent via `X-API-Key` header.
+
+    We store SHA-256 of the full key (not bcrypt) because API keys are
+    high-entropy (>=128 bits) — offline cracking is infeasible and the hash
+    is looked up on every request, so speed matters. `prefix` is the first
+    12 chars of the plaintext key, kept un-hashed so the UI can show "which
+    key" without revealing the secret.
+    """
+
+    __tablename__ = "api_keys"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Blacklist(Base, UUIDPKMixin, TimestampMixin):
     """GDPR erasure / opt-out requests. Checked before every entity write.
 

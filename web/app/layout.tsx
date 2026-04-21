@@ -50,6 +50,12 @@ export default function RootLayout({
                 >
                   Blacklist
                 </Link>
+                <Link
+                  href="/api-keys"
+                  className="text-neutral-600 hover:text-blue-600 dark:text-neutral-300 dark:hover:text-blue-400"
+                >
+                  API keys
+                </Link>
               </nav>
             </div>
             <span className="text-xs text-neutral-500 dark:text-neutral-400">

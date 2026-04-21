@@ -165,6 +165,24 @@ export interface AuthCredentials {
   password: string;
 }
 
+export interface ApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiKeyCreateResponse extends ApiKey {
+  key: string;
+}
+
+export interface ApiKeyListResponse {
+  items: ApiKey[];
+  total: number;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -312,6 +330,17 @@ export const api = {
     }),
 
   deleteBlacklistEntry: (id: string): Promise<void> => deleteRequest(`/blacklist/${id}`),
+
+  listApiKeys: (): Promise<ApiKeyListResponse> =>
+    request<ApiKeyListResponse>("/api-keys"),
+
+  createApiKey: (name: string): Promise<ApiKeyCreateResponse> =>
+    request<ApiKeyCreateResponse>("/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+
+  revokeApiKey: (id: string): Promise<void> => deleteRequest(`/api-keys/${id}`),
 };
 
 async function deleteRequest(path: string): Promise<void> {

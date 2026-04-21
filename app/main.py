@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import auth, blacklist, health, jobs, privacy, review, templates
+from app.api import api_keys, auth, blacklist, health, jobs, privacy, review, templates
 from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
@@ -58,3 +58,5 @@ app.include_router(jobs.router, dependencies=_auth)
 app.include_router(review.router, dependencies=_auth)
 app.include_router(templates.router, dependencies=_auth)
 app.include_router(blacklist.router, dependencies=_auth)
+# api_keys uses get_current_user internally so it can read the caller's id.
+app.include_router(api_keys.router)
