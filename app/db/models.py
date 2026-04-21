@@ -256,6 +256,26 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+class HubspotIntegration(Base, UUIDPKMixin, TimestampMixin):
+    """Per-tenant HubSpot private-app token.
+
+    Stored in `EncryptedString` so the value is encrypted at rest if
+    APP_ENCRYPTION_KEY is configured. One row per tenant — if HubSpot is
+    reconnected, we overwrite the same row rather than piling duplicates.
+    """
+
+    __tablename__ = "hubspot_integrations"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    access_token: Mapped[str] = mapped_column(EncryptedString(1024), nullable=False)
+    last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Webhook(Base, UUIDPKMixin, TimestampMixin):
     """Outbound webhook endpoint configured by a tenant.
 
