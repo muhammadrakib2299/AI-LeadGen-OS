@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthGate } from "@/components/AuthGate";
+import { ComplianceBadge } from "@/components/ComplianceBadge";
 import { SystemStatus } from "@/components/SystemStatus";
 import "./globals.css";
 
@@ -61,9 +62,7 @@ export default function RootLayout({
             </div>
             <div className="flex items-center gap-4">
               <SystemStatus />
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                EU/UK · GDPR-compliant
-              </span>
+              <ComplianceBadge />
             </div>
           </header>
           <main>

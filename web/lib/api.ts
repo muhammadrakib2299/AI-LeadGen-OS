@@ -225,6 +225,11 @@ export interface JobDiagnostics {
   summary: string;
 }
 
+export interface ComplianceSettings {
+  compliant_mode: boolean;
+  jurisdiction: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -398,6 +403,9 @@ export const api = {
 
   getJobDiagnostics: (id: string): Promise<JobDiagnostics> =>
     request<JobDiagnostics>(`/jobs/${id}/diagnostics`),
+
+  getComplianceSettings: (): Promise<ComplianceSettings> =>
+    request<ComplianceSettings>("/settings/compliance"),
 };
 
 async function deleteRequest(path: string): Promise<void> {

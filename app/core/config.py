@@ -49,6 +49,12 @@ class Settings(BaseSettings):
 
     jurisdiction: Literal["EU", "UK", "US"] = "EU"
 
+    # Compliant Mode: when True, the pipeline restricts itself to Tier-1
+    # official APIs with clear ToS (Google Places, OpenCorporates) and
+    # skips the crawler entirely. Email/phone enrichment from websites is
+    # lost, but data minimization is guaranteed. See compliance.md §9.
+    compliant_mode: bool = False
+
     # Auth. JWT_SECRET MUST be set in prod; dev fallback is insecure on purpose
     # so a misconfigured prod deploy fails loudly rather than using a known key.
     jwt_secret: str = "dev-insecure-change-me"  # noqa: S105 — dev placeholder

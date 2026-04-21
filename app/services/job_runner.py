@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.models import Entity, Job
 from app.extractors.contacts import ContactsExtractor
@@ -241,6 +242,11 @@ class JobRunner:
         job.cost_usd = cost.total  # type: ignore[assignment]
 
     async def _crawl(self, job: Job, place: Place) -> list[CrawlResult]:
+        # Compliant Mode skips the crawler entirely. See compliance.md §9 —
+        # websites are a Tier-4 "last resort" source and not eligible when
+        # the operator has committed to data minimization for EU clients.
+        if get_settings().compliant_mode:
+            return []
         if not place.website_uri:
             return []
         return await self._crawler.crawl_entity_site(place.website_uri, job_id=job.id)

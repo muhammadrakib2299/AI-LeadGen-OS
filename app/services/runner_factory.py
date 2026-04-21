@@ -34,13 +34,14 @@ async def make_production_runner(
     crawler = Crawler(http=http, session=session)
 
     # Compose discovery adapters: Places is primary; Yelp is an optional
-    # fallback, enabled only when a key is configured.
+    # fallback, enabled only when a key is configured AND compliant mode is
+    # off (Yelp's 24h storage rule makes it non-compliant for strict EU).
     adapters = [PlacesAdapter(places)]
     yelp: YelpClient | None = None
-    if settings.yelp_api_key:
+    if settings.yelp_api_key and not settings.compliant_mode:
         yelp = YelpClient(http=http, api_key=settings.yelp_api_key, session=session)
         adapters.append(YelpAdapter(yelp))
-    router = SmartRouter(adapters)
+    router = SmartRouter(adapters, compliant_mode=settings.compliant_mode)
 
     llm: LLMClient | None = None
     if settings.anthropic_api_key:

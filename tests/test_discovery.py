@@ -30,9 +30,11 @@ class _StubAdapter:
         cost: float = 0.01,
         result: list[Place] | None = None,
         raises: Exception | None = None,
+        is_official_api: bool = True,
     ) -> None:
         self.name = name
         self.cost_per_call_usd = cost
+        self.is_official_api = is_official_api
         self._result = result if result is not None else []
         self._raises = raises
         self.calls = 0

@@ -34,6 +34,12 @@ class DiscoveryAdapter(Protocol):
 
     name: str
     cost_per_call_usd: float
+    # True when this source is a Tier-1 official API with a clear ToS that
+    # permits indefinite storage of derived facts (Google Places, companies
+    # registers). False for sources with storage restrictions (Yelp = 24h)
+    # or legally-ambiguous scraped data. Compliant Mode only consults
+    # adapters where this is True. See sources.md.
+    is_official_api: bool
 
     async def search(
         self,
@@ -54,6 +60,9 @@ class PlacesAdapter:
 
     name = "google_places"
     cost_per_call_usd = TEXT_SEARCH_COST_USD
+    # Google Maps Platform ToS permits storing derived Places data for up
+    # to 30 days (place_id indefinitely) — compliant for Tier-1 use.
+    is_official_api = True
 
     def __init__(self, client: PlacesClient) -> None:
         self._client = client
@@ -87,6 +96,9 @@ class YelpAdapter:
 
     name = "yelp"
     cost_per_call_usd = YELP_SEARCH_COST_USD
+    # Yelp's 24h storage rule makes it NOT a Tier-1 source for Compliant Mode;
+    # it's filtered out when the operator toggles compliance on.
+    is_official_api = False
 
     def __init__(self, client: YelpClient) -> None:
         self._client = client
@@ -178,14 +190,35 @@ class AllAdaptersDownError(Exception):
 
 
 class SmartRouter:
-    def __init__(self, adapters: list[DiscoveryAdapter]) -> None:
+    def __init__(
+        self,
+        adapters: list[DiscoveryAdapter],
+        *,
+        compliant_mode: bool = False,
+    ) -> None:
         if not adapters:
             raise ValueError("SmartRouter needs at least one adapter")
+        # Filter to Tier-1 official APIs when compliant mode is on. We do
+        # this at construction rather than per-call so the failure mode
+        # ("all adapters down") is the same whether compliance filtered
+        # them out or circuit breakers tripped them.
+        if compliant_mode:
+            adapters = [a for a in adapters if getattr(a, "is_official_api", False)]
+            if not adapters:
+                raise ValueError(
+                    "SmartRouter in compliant mode has no Tier-1 adapters — "
+                    "at minimum PlacesAdapter must be registered"
+                )
         self._adapters = adapters
+        self._compliant_mode = compliant_mode
 
     @property
     def adapters(self) -> list[DiscoveryAdapter]:
         return list(self._adapters)
+
+    @property
+    def compliant_mode(self) -> bool:
+        return self._compliant_mode
 
     async def search(
         self,
