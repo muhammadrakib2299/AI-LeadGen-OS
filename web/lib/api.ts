@@ -183,6 +183,17 @@ export interface ApiKeyListResponse {
   total: number;
 }
 
+export interface ReverifyResponse {
+  scanned: number;
+  websites_checked: number;
+  websites_dead: number;
+  emails_checked: number;
+  emails_invalid: number;
+  phones_checked: number;
+  phones_invalid: number;
+  errors: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -341,6 +352,15 @@ export const api = {
     }),
 
   revokeApiKey: (id: string): Promise<void> => deleteRequest(`/api-keys/${id}`),
+
+  runReverify: (payload: {
+    max_age_days?: number;
+    limit?: number;
+  } = {}): Promise<ReverifyResponse> =>
+    request<ReverifyResponse>("/reverify", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 
 async function deleteRequest(path: string): Promise<void> {

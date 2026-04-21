@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ReverifyCard } from "@/components/ReverifyCard";
 import {
   ApiError,
   api,
@@ -58,6 +59,7 @@ export default function JobsPage() {
   return (
     <div className="space-y-8">
       <CreateJobForm onCreated={refresh} />
+      <ReverifyCard />
       <section>
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="text-lg font-medium">Recent jobs</h2>
