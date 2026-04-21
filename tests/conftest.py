@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -12,12 +13,37 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from app.api.deps import get_current_user
 from app.core.config import get_settings
+from app.db.models import User
+from app.main import app
 
 
 @pytest.fixture(scope="session")
 def anyio_backend() -> str:
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def override_current_user() -> Iterator[User]:
+    """Pretend every test caller is authenticated.
+
+    Phase 4 gated most routers behind `get_current_user`. Existing tests
+    (jobs, review, templates, blacklist) pre-date auth and would otherwise
+    401. Tests that want to exercise the unauth path can pop this override
+    explicitly:
+
+        app.dependency_overrides.pop(get_current_user, None)
+    """
+    fake = User(
+        id=uuid4(),
+        email="test@example.com",
+        password_hash="not-a-real-hash",
+        is_active=True,
+    )
+    app.dependency_overrides[get_current_user] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest_asyncio.fixture

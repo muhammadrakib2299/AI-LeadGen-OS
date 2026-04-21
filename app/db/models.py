@@ -197,6 +197,19 @@ class SearchTemplate(Base, UUIDPKMixin, TimestampMixin):
     __table_args__ = (UniqueConstraint("name", name="uq_search_templates_name"),)
 
 
+class User(Base, UUIDPKMixin, TimestampMixin):
+    """Operator account. Phase 4 is single-tenant; one user == full access.
+
+    Multi-tenant isolation is Phase 5; until then, rows are not scoped by user.
+    """
+
+    __tablename__ = "users"
+
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
 class Blacklist(Base, UUIDPKMixin, TimestampMixin):
     """GDPR erasure / opt-out requests. Checked before every entity write.
 

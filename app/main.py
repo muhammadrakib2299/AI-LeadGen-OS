@@ -3,11 +3,12 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import blacklist, health, jobs, privacy, review, templates
+from app.api import auth, blacklist, health, jobs, privacy, review, templates
+from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.sentry import configure_sentry
@@ -41,12 +42,19 @@ app.add_middleware(
     allow_origins=get_settings().cors_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=False,
+    # Credentials on so the browser will send the session cookie.
+    allow_credentials=True,
 )
 
+# Public routes: health (monitoring), privacy opt-out (data subjects have no
+# account), auth (login/register).
 app.include_router(health.router)
 app.include_router(privacy.router)
-app.include_router(jobs.router)
-app.include_router(review.router)
-app.include_router(templates.router)
-app.include_router(blacklist.router)
+app.include_router(auth.router)
+
+# Operator-only routes: gated at the router level.
+_auth = [Depends(get_current_user)]
+app.include_router(jobs.router, dependencies=_auth)
+app.include_router(review.router, dependencies=_auth)
+app.include_router(templates.router, dependencies=_auth)
+app.include_router(blacklist.router, dependencies=_auth)

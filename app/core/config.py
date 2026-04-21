@@ -46,6 +46,12 @@ class Settings(BaseSettings):
 
     jurisdiction: Literal["EU", "UK", "US"] = "EU"
 
+    # Auth. JWT_SECRET MUST be set in prod; dev fallback is insecure on purpose
+    # so a misconfigured prod deploy fails loudly rather than using a known key.
+    jwt_secret: str = "dev-insecure-change-me"  # noqa: S105 — dev placeholder
+    jwt_algorithm: Literal["HS256"] = "HS256"
+    jwt_ttl_seconds: int = 60 * 60 * 24 * 7  # 7 days
+
 
 @lru_cache
 def get_settings() -> Settings:

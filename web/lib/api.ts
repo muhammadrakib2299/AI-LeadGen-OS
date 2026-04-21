@@ -5,6 +5,8 @@
  * message instead of a generic "Something went wrong."
  */
 
+import { clearToken, getToken } from "./auth";
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -145,6 +147,24 @@ export interface CreateDiscoveryJobRequest {
   idempotency_key?: string;
 }
 
+export interface AuthUserResponse {
+  id: string;
+  email: string;
+  is_active: boolean;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+  user: AuthUserResponse;
+}
+
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -166,6 +186,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!isFormData && !("Content-Type" in headers)) {
     headers["Content-Type"] = "application/json";
   }
+  const token = getToken();
+  if (token && !("Authorization" in headers)) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers,
@@ -180,12 +204,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // fall through; status-text is fine
     }
+    if (res.status === 401) {
+      clearToken();
+    }
     throw new ApiError(res.status, detail);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
 export const api = {
+  login: (payload: AuthCredentials): Promise<TokenResponse> =>
+    request<TokenResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  register: (payload: AuthCredentials): Promise<TokenResponse> =>
+    request<TokenResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  logout: (): Promise<void> => request<void>("/auth/logout", { method: "POST" }),
+
+  me: (): Promise<AuthUserResponse> => request<AuthUserResponse>("/auth/me"),
+
   listJobs: (limit = 25): Promise<JobListResponse> =>
     request<JobListResponse>(`/jobs?limit=${limit}`),
 

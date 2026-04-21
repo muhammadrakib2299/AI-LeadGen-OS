@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AuthGate } from "@/components/AuthGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -55,7 +56,9 @@ export default function RootLayout({
               EU/UK · GDPR-compliant
             </span>
           </header>
-          <main>{children}</main>
+          <main>
+            <AuthGate>{children}</AuthGate>
+          </main>
         </div>
       </body>
     </html>
