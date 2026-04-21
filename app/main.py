@@ -26,12 +26,16 @@ from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.sentry import configure_sentry
+from app.core.telemetry import configure_telemetry
+from app.db.session import get_engine
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     configure_sentry()
+    # Instrumentation lives behind an env flag; when unset, this is a no-op.
+    configure_telemetry(_app, engine=get_engine())
     log = get_logger(__name__)
     settings = get_settings()
     log.info(

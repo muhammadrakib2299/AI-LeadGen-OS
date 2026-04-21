@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     # control — this is defense-in-depth for backups and replicas.
     app_encryption_key: str | None = None
 
+    # OpenTelemetry export. Set OTEL_EXPORTER_OTLP_ENDPOINT to a Grafana
+    # Cloud / Honeycomb / self-hosted collector URL (e.g.
+    # https://otlp-gateway-prod-eu-west-0.grafana.net/otlp). Additional
+    # standard env vars (OTEL_EXPORTER_OTLP_HEADERS, OTEL_SERVICE_NAME)
+    # are honored automatically by the OTel SDK — we only read the endpoint
+    # to decide whether to install instrumentation at all.
+    otel_exporter_otlp_endpoint: str | None = None
+
     # Auth. JWT_SECRET MUST be set in prod; dev fallback is insecure on purpose
     # so a misconfigured prod deploy fails loudly rather than using a known key.
     jwt_secret: str = "dev-insecure-change-me"  # noqa: S105 — dev placeholder
