@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # Yelp Fusion API key (Authorization: Bearer). Enables the YelpAdapter
     # fallback in the discovery router; see app/services/yelp.py.
     yelp_api_key: str | None = None
+    # Foursquare Places v3 API key. Enables the FoursquareAdapter fallback.
+    foursquare_api_key: str | None = None
 
     sentry_dsn: str | None = None
 

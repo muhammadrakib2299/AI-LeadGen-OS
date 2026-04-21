@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.core.circuit import CircuitBreaker
 from app.services.email_verify import _DNS_BREAKER
+from app.services.foursquare import _BREAKER as _FOURSQUARE_BREAKER
 from app.services.llm import _ANTHROPIC_BREAKER
 from app.services.opencorporates import _BREAKER as _OPENCORPORATES_BREAKER
 from app.services.places import _PLACES_BREAKER
@@ -36,6 +37,7 @@ class SystemStatusResponse(BaseModel):
 
 _BREAKERS: list[CircuitBreaker] = [
     _PLACES_BREAKER,
+    _FOURSQUARE_BREAKER,
     _YELP_BREAKER,
     _OPENCORPORATES_BREAKER,
     _ANTHROPIC_BREAKER,

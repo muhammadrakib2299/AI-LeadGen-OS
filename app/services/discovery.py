@@ -19,8 +19,11 @@ from uuid import UUID
 
 from app.core.circuit import CircuitOpenError
 from app.core.logging import get_logger
+from app.models.foursquare import FsqPlace
 from app.models.places import Place
 from app.models.yelp import YelpBusiness
+from app.services.foursquare import SEARCH_COST_USD as FSQ_SEARCH_COST_USD
+from app.services.foursquare import FoursquareClient
 from app.services.places import TEXT_SEARCH_COST_USD, PlacesClient
 from app.services.yelp import SEARCH_COST_USD as YELP_SEARCH_COST_USD
 from app.services.yelp import YelpClient
@@ -181,6 +184,84 @@ def _yelp_to_place(b: YelpBusiness) -> Place:
             "types": [],
             "nationalPhoneNumber": b.display_phone,
             "internationalPhoneNumber": b.phone,
+        }
+    )
+
+
+class FoursquareAdapter:
+    """Foursquare Places v3 fallback. Maps fsq places to the common `Place` shape.
+
+    Tier-1 official API under ToS — stays enabled in Compliant Mode. Only
+    objective facts (name, address, phone, website, coords) are carried;
+    `categories` and other curated signals are dropped so the entities
+    table stays source-neutral.
+    """
+
+    name = "foursquare"
+    cost_per_call_usd = FSQ_SEARCH_COST_USD
+    is_official_api = True
+
+    def __init__(self, client: FoursquareClient) -> None:
+        self._client = client
+
+    async def search(
+        self,
+        query: str,
+        *,
+        region_code: str | None,
+        max_results: int,
+        job_id: UUID | None,
+    ) -> list[Place]:
+        near = _location_hint_from_query(query, region_code)
+        if not near:
+            log.info("foursquare_adapter_skipped_no_location", query=query)
+            return []
+        fsq_places = await self._client.search_places(
+            query=_term_from_query(query),
+            near=near,
+            max_results=max_results,
+            job_id=job_id,
+        )
+        return [_fsq_to_place(p) for p in fsq_places]
+
+
+def _fsq_to_place(p: FsqPlace) -> Place:
+    loc = p.location
+    city = loc.locality if loc else None
+    country = loc.country if loc else None
+    address_components: list[dict[str, object]] = []
+    if city:
+        address_components.append(
+            {"longText": city, "shortText": city, "types": ["locality"]}
+        )
+    if country:
+        address_components.append(
+            {"longText": country, "shortText": country, "types": ["country"]}
+        )
+    coords: dict[str, float] | None = None
+    if (
+        p.geocodes
+        and p.geocodes.main
+        and p.geocodes.main.latitude is not None
+        and p.geocodes.main.longitude is not None
+    ):
+        coords = {
+            "latitude": p.geocodes.main.latitude,
+            "longitude": p.geocodes.main.longitude,
+        }
+    formatted = loc.formatted_address if loc else None
+
+    return Place.model_validate(
+        {
+            "id": f"fsq:{p.fsq_id}",
+            "displayName": {"text": p.name, "languageCode": None},
+            "formattedAddress": formatted,
+            "addressComponents": address_components,
+            "location": coords,
+            "types": [],
+            "websiteUri": p.website,
+            "nationalPhoneNumber": p.tel,
+            "internationalPhoneNumber": p.tel,
         }
     )
 

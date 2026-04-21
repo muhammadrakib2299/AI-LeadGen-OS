@@ -14,7 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.extractors.contacts import ContactsExtractor
 from app.services.crawler import Crawler
-from app.services.discovery import PlacesAdapter, SmartRouter, YelpAdapter
+from app.services.discovery import (
+    FoursquareAdapter,
+    PlacesAdapter,
+    SmartRouter,
+    YelpAdapter,
+)
+from app.services.foursquare import FoursquareClient
 from app.services.job_runner import JobRunner
 from app.services.llm import AnthropicClient, LLMClient
 from app.services.places import PlacesClient
@@ -33,10 +39,17 @@ async def make_production_runner(
     places = PlacesClient(http=http, api_key=settings.google_places_api_key, session=session)
     crawler = Crawler(http=http, session=session)
 
-    # Compose discovery adapters: Places is primary; Yelp is an optional
-    # fallback, enabled only when a key is configured AND compliant mode is
-    # off (Yelp's 24h storage rule makes it non-compliant for strict EU).
+    # Compose discovery adapters, priority order:
+    #   1. Google Places (primary)
+    #   2. Foursquare (Tier-1 fallback; stays on in Compliant Mode)
+    #   3. Yelp (curated content + 24h storage rule — off in Compliant Mode)
     adapters = [PlacesAdapter(places)]
+    foursquare: FoursquareClient | None = None
+    if settings.foursquare_api_key:
+        foursquare = FoursquareClient(
+            http=http, api_key=settings.foursquare_api_key, session=session
+        )
+        adapters.append(FoursquareAdapter(foursquare))
     yelp: YelpClient | None = None
     if settings.yelp_api_key and not settings.compliant_mode:
         yelp = YelpClient(http=http, api_key=settings.yelp_api_key, session=session)
