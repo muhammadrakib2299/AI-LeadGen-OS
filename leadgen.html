@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI LeadGen OS — Product Overview</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --fg-muted: #555;
+    --fg-faint: #888;
+    --bg: #ffffff;
+    --bg-soft: #fafafa;
+    --bg-strip: #f3f4f6;
+    --border: #e5e7eb;
+    --border-strong: #d1d5db;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --good: #16a34a;
+    --good-soft: #dcfce7;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --bad: #dc2626;
+    --bad-soft: #fee2e2;
+    --code-bg: #f6f8fa;
+    --code-fg: #24292f;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.55;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    color: #fff;
+    padding: 56px 32px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 2.5rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .hero .tagline { font-size: 1.15rem; opacity: 0.85; margin: 0; }
+  .hero .meta {
+    margin-top: 24px;
+    font-size: 0.85rem;
+    opacity: 0.7;
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 32px;
+    gap: 40px;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .toc { display: none; }
+  }
+  .toc {
+    position: sticky;
+    top: 16px;
+    align-self: start;
+    font-size: 0.85rem;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+  .toc h3 {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-faint);
+    margin: 16px 0 6px;
+  }
+  .toc a {
+    display: block;
+    color: var(--fg-muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin: 1px 0;
+  }
+  .toc a:hover { background: var(--bg-strip); color: var(--accent); }
+  main { min-width: 0; }
+  section {
+    margin-bottom: 56px;
+    scroll-margin-top: 16px;
+  }
+  h2 {
+    font-size: 1.8rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-top: 0;
+    letter-spacing: -0.01em;
+  }
+  h3 { font-size: 1.25rem; margin-top: 32px; }
+  h4 { font-size: 1.05rem; margin-top: 24px; color: var(--fg-muted); }
+  p { color: var(--fg-muted); }
+  code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    font-size: 0.88em;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 14px 18px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  pre code { background: transparent; padding: 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.92rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-strip);
+    font-weight: 600;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+  }
+  tr:hover td { background: var(--bg-soft); }
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad  { background: var(--bad-soft);  color: var(--bad); }
+  .pill.muted { background: var(--bg-strip); color: var(--fg-muted); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+    font-size: 0.92rem;
+    color: var(--fg);
+  }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.good { border-color: var(--good); background: var(--good-soft); }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 16px 0;
+  }
+  @media (max-width: 700px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--bg);
+  }
+  .card h4 { margin: 0 0 4px; color: var(--fg); font-size: 0.95rem; }
+  .card p { margin: 0; font-size: 0.88rem; color: var(--fg-muted); }
+  .mermaid { background: var(--bg-soft); padding: 16px; border-radius: 8px; margin: 16px 0; }
+
+  /* ─── Wireframe / mockup styles ─────────────────────────────────────── */
+  .mockup {
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 24px 0 40px;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  }
+  .mockup-titlebar {
+    background: #f5f5f7;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-strong);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+  }
+  .mockup-dots { color: #c4c4c4; letter-spacing: 4px; font-size: 14px; }
+  .mockup-url {
+    background: #fff;
+    padding: 3px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-size: 11px;
+    color: var(--fg-faint);
+    flex: 1;
+    text-align: center;
+    max-width: 380px;
+    margin: 0 auto;
+    font-family: ui-monospace, monospace;
+  }
+  .mockup-body {
+    background: var(--bg-soft);
+    min-height: 320px;
+    padding: 0;
+    font-size: 0.88rem;
+  }
+  .wf-nav {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .wf-logo {
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 0.95rem;
+  }
+  .wf-nav-links {
+    display: flex;
+    gap: 18px;
+    font-size: 0.83rem;
+  }
+  .wf-nav-links span {
+    color: var(--fg-muted);
+    cursor: default;
+  }
+  .wf-nav-links span.active { color: var(--accent); font-weight: 600; }
+  .wf-nav .right { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 0.8rem; color: var(--fg-muted); }
+  .wf-content { padding: 20px; }
+  .wf-h1 { font-size: 1.15rem; font-weight: 600; margin: 0 0 4px; color: var(--fg); }
+  .wf-sub { color: var(--fg-muted); font-size: 0.82rem; margin: 0 0 16px; }
+  .wf-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+  }
+  .wf-card h5 {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--fg-faint);
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .wf-stat { font-size: 1.4rem; font-weight: 700; color: var(--fg); }
+  .wf-stat-label { font-size: 0.75rem; color: var(--fg-faint); }
+  .wf-input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--fg-muted);
+    font-size: 0.85rem;
+  }
+  .wf-label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+    margin: 0 0 4px;
+    font-weight: 500;
+  }
+  .wf-button {
+    display: inline-block;
+    padding: 7px 14px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 5px;
+    font-size: 0.85rem;
+    border: none;
+    font-weight: 500;
+  }
+  .wf-button.ghost {
+    background: transparent;
+    color: var(--fg-muted);
+    border: 1px solid var(--border-strong);
+  }
+  .wf-button.danger { background: var(--bad); }
+  .wf-button.muted { background: var(--bg-strip); color: var(--fg-muted); }
+  .wf-table { font-size: 0.82rem; margin: 0; }
+  .wf-table th { background: transparent; padding: 8px 10px; }
+  .wf-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .wf-row { display: flex; gap: 12px; align-items: center; }
+  .wf-spacer { flex: 1; }
+  .wf-grid-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .wf-grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 16px; }
+  .wf-sidebar {
+    width: 200px;
+    background: #fff;
+    border-right: 1px solid var(--border);
+    padding: 16px 12px;
+    min-height: 360px;
+    font-size: 0.83rem;
+  }
+  .wf-sidebar-item {
+    padding: 7px 10px;
+    border-radius: 4px;
+    color: var(--fg-muted);
+    margin-bottom: 2px;
+    cursor: default;
+  }
+  .wf-sidebar-item.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .wf-with-sidebar { display: flex; }
+  .wf-main { flex: 1; padding: 20px; }
+  .wf-progress {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    width: 100%;
+  }
+  .wf-progress > div {
+    background: var(--accent);
+    height: 100%;
+  }
+  .wf-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    background: var(--bg-strip);
+    color: var(--fg-muted);
+  }
+  .wf-badge.success { background: var(--good-soft); color: var(--good); }
+  .wf-badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .wf-badge.bad { background: var(--bad-soft); color: var(--bad); }
+  .wf-badge.info { background: var(--accent-soft); color: var(--accent); }
+  .mockup-caption {
+    padding: 8px 14px;
+    background: var(--bg-strip);
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    font-style: italic;
+  }
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 8px 0;
+    font-size: 0.9rem;
+  }
+  summary { cursor: pointer; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>AI LeadGen OS</h1>
+  <p class="tagline">Compliant, cost-controlled lead generation for EU/UK B2B data.</p>
+  <div class="meta">
+    <span>📦 Python · FastAPI · Next.js</span>
+    <span>🇪🇺 GDPR-first</span>
+    <span>🤖 Claude + OpenAI</span>
+    <span>✅ 334 tests passing</span>
+  </div>
+</header>
+
+<div class="layout">
+
+<aside class="toc">
+  <h3>Overview</h3>
+  <a href="#description">What it is</a>
+  <a href="#who-its-for">Who it's for</a>
+  <a href="#features">Feature matrix</a>
+  <a href="#business-model">Business model</a>
+  <a href="#input-output">Input → Output</a>
+
+  <h3>Inside</h3>
+  <a href="#tech">Technology stack</a>
+  <a href="#ai-models">AI model overview</a>
+  <a href="#how-it-works">How it works</a>
+
+  <h3>Workflows</h3>
+  <a href="#workflow-overall">System workflow</a>
+  <a href="#workflow-user">SaaS user workflow</a>
+  <a href="#workflow-admin">SaaS admin workflow</a>
+
+  <h3>UI mockups</h3>
+  <a href="#mockup-login">Login</a>
+  <a href="#mockup-dashboard">Dashboard</a>
+  <a href="#mockup-new-job">New job form</a>
+  <a href="#mockup-job-detail">Job detail</a>
+  <a href="#mockup-review">Review queue</a>
+  <a href="#mockup-bulk">Bulk upload</a>
+  <a href="#mockup-leads">Leads pipeline</a>
+  <a href="#mockup-ask">AI Ask Mode</a>
+  <a href="#mockup-ops">Operator dashboard</a>
+  <a href="#mockup-integrations">Integrations</a>
+  <a href="#mockup-api-keys">API keys</a>
+  <a href="#mockup-blacklist">Blacklist</a>
+  <a href="#mockup-pricing">Pricing</a>
+  <a href="#mockup-billing">Billing</a>
+</aside>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="description">
+<h2>What it is</h2>
+
+<p><strong>AI LeadGen OS</strong> turns a natural-language question — "restaurants in Paris with vegan options," "B2B SaaS in Berlin," "law firms in Amsterdam" — into a verified, deduplicated, GDPR-compliant list of business leads with name, website, email, phone, and provenance per field.</p>
+
+<p>It also accepts a CSV of company names you already have ("here are 500 prospects, find me their websites and decision-maker emails") and returns the enriched file in about ten minutes.</p>
+
+<p>The system is built for a <strong>solo operator or small team running a B2B outreach business in the EU/UK</strong>: every cost is capped per job, every fetch is logged for audit, every PII column is encrypted at rest, and a one-flag "Compliant Mode" restricts the pipeline to Tier-1 official APIs only.</p>
+
+<div class="callout good">
+<strong>Project status:</strong> 100% of the original scope shipped. 334 passing tests. Multi-tenant SaaS with Stripe billing, team seats, CRM connectors (HubSpot + Pipedrive), export destinations (CSV + S3 + Google Sheets), AI Ask Mode (filter + vector RAG), API key rotation, scheduled retention/reverify cron. Ready to deploy.
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="who-its-for">
+<h2>Who it's for</h2>
+
+<div class="grid-3">
+  <div class="card">
+    <h4>🎯 Solo B2B operator</h4>
+    <p>Selling outbound services in the EU/UK. You need 100–500 verified leads a week, can't afford an Apollo seat, and refuse to ship anything LinkedIn-scraped to your clients.</p>
+  </div>
+  <div class="card">
+    <h4>🏢 Outreach agency</h4>
+    <p>Running campaigns for 3–10 clients in parallel. You want each client's data isolated (multi-tenant), need CRM push to wherever they live (HubSpot or Pipedrive), and need to bill them via Stripe without writing the integration yourself.</p>
+  </div>
+  <div class="card">
+    <h4>📊 Sales-ops at a small SaaS</h4>
+    <p>Want to enrich your existing CRM with EU contacts you already have permission to email, plus discover new ICPs. The bulk-CSV mode is your friend.</p>
+  </div>
+</div>
+
+<h3>What you stop doing</h3>
+<table>
+<thead><tr><th>Before</th><th>After</th></tr></thead>
+<tbody>
+  <tr><td>Pay $500/mo for an Apollo seat that scrapes LinkedIn (legally dubious in the EU)</td>
+      <td>Self-host or pay-as-you-go on official APIs only</td></tr>
+  <tr><td>Hand-build a Google Places → Sheets glue script that breaks every quarter</td>
+      <td>One signed export URL or a configured Sheets destination, done</td></tr>
+  <tr><td>Get a GDPR data-subject email and have to grep across 4 CSVs</td>
+      <td>One <code>POST /privacy/opt-out</code>; the system fans the erasure to every tenant holding the subject</td></tr>
+  <tr><td>Discover the email pattern for a target company by trial-and-error</td>
+      <td>Hunter MX-verified emails behind a per-domain cache so you don't re-spend</td></tr>
+  <tr><td>Forget what you spent on a prospecting run last Tuesday</td>
+      <td>Per-job <code>cost_usd</code> tracked at write time + dashboard rollup</td></tr>
+</tbody>
+</table>
+
+<h3>Why now</h3>
+<p>Three forces are converging right now:</p>
+<ul>
+  <li><strong>Apollo / ZoomInfo / Lusha</strong> all rely on LinkedIn scraping. EU enforcement is tightening (CNIL fines, ICO scrutiny). Buyers want a clean alternative.</li>
+  <li><strong>Cheap LLMs</strong> (Haiku-class) make NL → structured query parsing a $0.0001 op — you can charge for it.</li>
+  <li><strong>pgvector + cheap embeddings</strong> mean "Ask Mode" RAG is a one-day build, not a quarter-long ML project.</li>
+</ul>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="features">
+<h2>Feature matrix</h2>
+
+<table>
+<thead><tr>
+  <th>Area</th>
+  <th>Feature</th>
+  <th>What you get</th>
+  <th>Status</th>
+</tr></thead>
+<tbody>
+  <tr><td rowspan="3"><strong>Discovery</strong></td>
+      <td>Natural-language query</td>
+      <td>Type "cafes in Lisbon"; LLM parses entity type + location + filters</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Multi-source fusion</td>
+      <td>Google Places (primary) + Yelp + Foursquare + OpenCorporates fallbacks</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>SmartRouter</td>
+      <td>Cache → free API → paid API → compliant scrape, in that order</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="3"><strong>Enrichment</strong></td>
+      <td>Website crawler</td>
+      <td>Homepage + /contact + /about + /impressum (DE) + /mentions-legales (FR)</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Contact extraction</td>
+      <td>Regex + LLM extracts emails, phones, social handles, addresses</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Email + phone verification</td>
+      <td>Syntax + MX + Hunter (top-value only); phone format + country code</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Quality</strong></td>
+      <td>0–100 score</td>
+      <td>Completeness + freshness + source-trust composite</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Review queue</td>
+      <td>Low-confidence rows surface for one-click approve/reject</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Bulk mode</strong></td>
+      <td>CSV upload (≤500 rows)</td>
+      <td>Paste a list of company names → enriched CSV in ~10 min</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Saved templates</td>
+      <td>"EU SaaS startups" — re-run common queries in one click</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="3"><strong>AI Ask Mode</strong></td>
+      <td>Structured-filter (v1)</td>
+      <td>"Show me Paris restaurants with verified emails" → SQL filter → rows</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Vector similarity (v2)</td>
+      <td>"Companies similar to acme.example" → pgvector cosine search</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>GDPR-safe embeddings</td>
+      <td>Only non-PII text embedded — email/phone/address never leave</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="3"><strong>Sales pipeline</strong></td>
+      <td>Lead status</td>
+      <td>new → contacted → responded → converted | lost</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Attribution report</td>
+      <td>Source mix, cost, quality per export window</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Operator dashboard</td>
+      <td>Queue depth + 24h source health + top costs + recent failures</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="4"><strong>Integrations</strong></td>
+      <td>HubSpot</td>
+      <td>Push entities as Contacts; per-tenant private-app token</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Pipedrive</td>
+      <td>Push entities as Persons; api_token + optional company_domain</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>S3 export</td>
+      <td>On-demand CSV upload to a tenant-configured bucket</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Google Sheets</td>
+      <td>Service-account auth; appends rows; column parity with CSV</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="4"><strong>SaaS</strong></td>
+      <td>Multi-tenant isolation</td>
+      <td>Every read/write scoped through tenant_id; foreign rows 404</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Stripe billing</td>
+      <td>Checkout → webhook → tenant.plan; free / standard / past_due / canceled</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Team seats</td>
+      <td>Tenant invites with HMAC tokens; 14-day expiry</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>API keys + rotation</td>
+      <td>Create / revoke / rotate (24h grace overlap)</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Webhooks</strong></td>
+      <td>job.completed event</td>
+      <td>HMAC-SHA256 signed POST; per-tenant config</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Delivery audit</td>
+      <td>Every attempt logged with status, duration, payload</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="6"><strong>Compliance</strong></td>
+      <td>Compliant Mode toggle</td>
+      <td>Restricts pipeline to Tier-1 official APIs only</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Public opt-out endpoint</td>
+      <td>POST /privacy/opt-out — fans out to every tenant holding the subject</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Per-fetch audit log</td>
+      <td>raw_fetches: URL, status, legal_basis, content hash, cost</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>PII encryption at rest</td>
+      <td>Phone + address encrypted with Fernet (APP_ENCRYPTION_KEY)</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>robots.txt enforcement</td>
+      <td>RFC 9309 compliant; can_fetch() checked per path; cached per host</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Daily retention sweep</td>
+      <td>arq cron: raw_fetches 90d, exports 30d, entities 24mo, Yelp payload 24h</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="3"><strong>Ops</strong></td>
+      <td>OpenTelemetry</td>
+      <td>HTTP + DB + LLM spans exported to Grafana / Honeycomb</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Sentry</td>
+      <td>Unhandled exceptions and warnings</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Daily reverification cron</td>
+      <td>Aged entities re-checked: website liveness, email MX, phone parse</td>
+      <td><span class="pill good">Live</span></td></tr>
+
+  <tr><td rowspan="2"><strong>Testing</strong></td>
+      <td>Backend</td>
+      <td>334 pytest tests — unit, integration, DB-backed</td>
+      <td><span class="pill good">Live</span></td></tr>
+  <tr><td>Frontend E2E</td>
+      <td>Playwright golden paths — login, create job, see result</td>
+      <td><span class="pill good">Live</span></td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="business-model">
+<h2>Business model & unit economics</h2>
+
+<p>Two-tier subscription with usage-metered overage. Free tier proves the pipeline; Standard plan opens up team seats, all integrations, and Ask Mode.</p>
+
+<h3>Pricing (current)</h3>
+<table>
+<thead><tr>
+  <th>Plan</th><th>Price</th><th>Leads/mo</th><th>Seats</th><th>Exports</th><th>CRM</th><th>Ask Mode</th><th>Webhooks</th>
+</tr></thead>
+<tbody>
+  <tr><td><strong>Free</strong></td><td>$0</td><td>50</td><td>1</td><td>CSV only</td><td>HubSpot</td><td>—</td><td>—</td></tr>
+  <tr><td><strong>Standard</strong></td><td>$99/mo</td><td>2,500</td><td>5</td><td>CSV + S3 + Sheets</td><td>HubSpot + Pipedrive</td><td>✓</td><td>✓</td></tr>
+</tbody>
+</table>
+
+<h3>Cost per lead (gross margin math)</h3>
+<table>
+<thead><tr><th>Cost line</th><th>Per 100-lead job</th><th>Notes</th></tr></thead>
+<tbody>
+  <tr><td>Google Places API</td><td>~$0.32</td><td>$0.0032 per Place Details call (after $200 free monthly credit)</td></tr>
+  <tr><td>Hunter (only top-quality)</td><td>~$0.10</td><td>~10 verifications at $0.01 each; pattern cache eliminates the rest</td></tr>
+  <tr><td>Anthropic Haiku (parser + extractor)</td><td>~$0.04</td><td>1 query parse + ~10 extractor calls at $0.0003 each</td></tr>
+  <tr><td>OpenAI embeddings (Ask v2 backfill)</td><td>~$0.002</td><td>1536-dim, 100 entities × ~12 tokens</td></tr>
+  <tr><td>Crawler bandwidth + compute</td><td>~$0.005</td><td>self-hosted on $20/mo Railway box</td></tr>
+  <tr><td><strong>Total cost</strong></td><td><strong>~$0.47</strong></td><td>$0.005 per lead</td></tr>
+</tbody>
+</table>
+
+<div class="callout good">
+<strong>Standard tier unit math:</strong> $99 ÷ 2,500 leads = <strong>$0.04 sell price per lead</strong>. Cost is ~$0.005 per lead. <strong>~87% gross margin</strong> at the cap; higher when users don't max it. Apollo's all-in CAC for the comparable seat is $99/mo for ~250 verified contacts ($0.40 per lead) — we're 10× cheaper at full utilization.
+</div>
+
+<h3>Market</h3>
+<ul>
+  <li><strong>TAM (sales-tools, EU/UK):</strong> ~€2.4B in 2025 (Statista, EU + UK B2B sales-intelligence segment).</li>
+  <li><strong>SAM (compliant alternative buyers):</strong> a couple thousand outreach agencies + ~30k EU SaaS sales teams who can't legally use LinkedIn-scraped data.</li>
+  <li><strong>SOM at $99 ARPU:</strong> 1,000 paying tenants = <strong>~$1.2M ARR</strong> with single-operator support.</li>
+</ul>
+
+<h3>Why we can win on price</h3>
+<ul>
+  <li><strong>Tiered LLM routing</strong> means we pay Haiku prices, not Opus — competitors using single-tier inference are 10–30× more expensive on the AI line.</li>
+  <li><strong>Pattern caches</strong> (email pattern, response cache) eliminate the bulk of upstream API spend on repeat queries within a tenant.</li>
+  <li><strong>Self-hosting on Railway/Fly</strong> keeps fixed infra at &lt;$200/mo for the first 100 customers — every dollar after that is margin.</li>
+  <li><strong>arq cron in the same worker</strong> means we don't pay for a separate scheduler service.</li>
+</ul>
+
+<h3>Roadmap monetization angles</h3>
+<table>
+<thead><tr><th>Future feature</th><th>Pricing leverage</th></tr></thead>
+<tbody>
+  <tr><td>Pay-as-you-go API tier (no subscription, $0.05/lead)</td><td>Captures one-off enrichment jobs without forcing a subscription decision</td></tr>
+  <tr><td>White-label deployment</td><td>One-time $5k setup + $499/mo for agencies who want to resell under their own brand</td></tr>
+  <tr><td>Compliance audit pack</td><td>Add-on $49/mo: signed audit log exports, DPA template, processor sub-list</td></tr>
+  <tr><td>Custom adapters (industry-specific data)</td><td>$2k one-time per source, expands TAM into healthcare / legal / finance verticals with their own registries</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="input-output">
+<h2>Input → Output</h2>
+
+<h3>Input: a natural-language query</h3>
+<pre><code>POST /jobs
+{
+  "query": "restaurants in Paris with vegan options",
+  "limit": 100,
+  "budget_cap_usd": 5.0
+}</code></pre>
+
+<p>The LLM parses this into a structured spec:</p>
+<pre><code>{
+  "entity_type": "restaurant",
+  "city": "Paris",
+  "country": "FR",
+  "keywords": ["vegan"],
+  "confidence": 0.92
+}</code></pre>
+
+<h3>Output: enriched CSV</h3>
+
+<p>The exported CSV has 18 columns covering identity, contact, location, taxonomy, quality, and provenance:</p>
+
+<table style="font-size: 0.78rem;">
+<thead><tr>
+  <th>name</th><th>website</th><th>email</th><th>phone</th>
+  <th>city</th><th>country</th><th>category</th>
+  <th>quality_score</th><th>email_source</th><th>...</th>
+</tr></thead>
+<tbody>
+  <tr>
+    <td>Le Potager du Marais</td>
+    <td>lepotager-marais.fr</td>
+    <td>contact@lepotager-marais.fr</td>
+    <td>+33 1 57 40 98 57</td>
+    <td>Paris</td><td>FR</td><td>vegetarian_restaurant</td>
+    <td>92</td><td>crawler</td><td>...</td>
+  </tr>
+  <tr>
+    <td>Café Ginger</td>
+    <td>cafe-ginger.com</td>
+    <td>hello@cafe-ginger.com</td>
+    <td>+33 1 42 71 50 92</td>
+    <td>Paris</td><td>FR</td><td>vegan_restaurant</td>
+    <td>87</td><td>crawler</td><td>...</td>
+  </tr>
+</tbody>
+</table>
+
+<p>Plus alternative export destinations: <strong>S3</strong>, <strong>Google Sheets</strong>, <strong>HubSpot Contacts</strong>, <strong>Pipedrive Persons</strong>.</p>
+
+<h3>Bulk-enrichment input</h3>
+<pre><code>POST /jobs/bulk-csv
+Content-Type: multipart/form-data
+
+file: prospects.csv
+  name,domain
+  Acme Bakery,acme-bakery.example
+  Berlin Coffee Roasters,
+  ,artisan-pizza.example
+  ...</code></pre>
+
+<p>Output: same enriched CSV format as discovery jobs — but the pipeline skips discovery and goes straight to crawl + extract for each row.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="tech">
+<h2>Technology stack overview</h2>
+
+<div class="grid-2">
+  <div class="card">
+    <h4>Backend</h4>
+    <p>Python 3.12 · FastAPI · Pydantic v2 · SQLAlchemy 2 (async) · Alembic · uvicorn · arq (Redis-backed queue + cron)</p>
+  </div>
+  <div class="card">
+    <h4>Frontend</h4>
+    <p>Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · shadcn/ui (Radix primitives) · lucide-react</p>
+  </div>
+  <div class="card">
+    <h4>Data</h4>
+    <p>Postgres 16 (with pgvector + pgcrypto + pg_trgm) · Redis 7 · column-level Fernet encryption for PII</p>
+  </div>
+  <div class="card">
+    <h4>External APIs</h4>
+    <p>Google Places API · Yelp Fusion · Foursquare Places v3 · OpenCorporates · Hunter (email verify) · Stripe (billing)</p>
+  </div>
+  <div class="card">
+    <h4>AI</h4>
+    <p>Anthropic Claude (Haiku + Sonnet, tiered routing) · OpenAI text-embedding-3-small (Ask Mode v2)</p>
+  </div>
+  <div class="card">
+    <h4>Observability</h4>
+    <p>OpenTelemetry (traces) · structlog (JSON logs) · Sentry (errors) · Grafana / Honeycomb-friendly OTLP</p>
+  </div>
+  <div class="card">
+    <h4>Testing</h4>
+    <p>pytest · pytest-asyncio · respx (HTTP mocks) · Playwright (E2E) · 334 backend + ~5 frontend tests</p>
+  </div>
+  <div class="card">
+    <h4>Deployment</h4>
+    <p>Docker Compose (local) · Railway / Fly.io / your-own-VPS (prod) · arq worker as a separate process</p>
+  </div>
+</div>
+
+<h3>Code layout</h3>
+<pre><code>ai-leadgen-os/
+├── app/
+│   ├── api/                FastAPI routers — auth, jobs, review,
+│   │                       leads, ask, dashboard, integrations,
+│   │                       billing, webhooks, api_keys, ...
+│   ├── core/               config, logging, sentry, telemetry,
+│   │                       crypto, api_keys, security
+│   ├── db/                 SQLAlchemy models, session, alembic wiring
+│   ├── extractors/         LLM + regex contact extraction
+│   ├── models/             Pydantic request / response models
+│   ├── services/           runner, discovery, crawler, dedupe,
+│   │                       quality, hubspot, pipedrive,
+│   │                       google_sheets, ask, embeddings, ...
+│   └── workers/            arq tasks — run_job, daily_retention,
+│                           daily_reverify
+├── alembic/versions/       ~20 migrations (additive only)
+├── tests/                  334 pytest tests, full green suite
+├── web/                    Next.js 15 dashboard
+│   ├── app/                App Router pages — login, jobs, review,
+│   │                       leads, bulk, blacklist, api-keys,
+│   │                       pricing
+│   ├── components/         shadcn/ui components + custom
+│   ├── lib/                api client, auth helpers
+│   └── e2e/                Playwright golden-path tests
+├── scripts/
+│   ├── postgres-init.sql   pgcrypto + pg_trgm + vector + uuid-ossp
+│   ├── retention_sweep.py  manual + cron entry point
+│   ├── reverify_aged.py    manual + cron entry point
+│   └── embed_entities.py   backfill embeddings for Ask Mode v2
+├── compliance.md           the GDPR policy document
+├── overview.md             the original blueprint
+├── sources.md              whitelisted data sources + ToS notes
+├── todo.md                 phased delivery checklist
+├── docker-compose.yml      Postgres (pgvector) + Redis
+└── pyproject.toml          deps + ruff + pytest config</code></pre>
+
+<h3>Architecture diagram</h3>
+<div class="mermaid">
+flowchart LR
+  user([Operator])-->web[Next.js dashboard]
+  api_caller([API caller])-->api
+  web-->api[FastAPI]
+  api-->pg[(Postgres + pgvector)]
+  api-->redis[(Redis)]
+  redis-->worker[arq worker]
+  worker-->pg
+  worker-->places[Google Places]
+  worker-->yelp[Yelp / Foursquare]
+  worker-->oc[OpenCorporates]
+  worker-->crawler[Crawler]
+  crawler-->extractor[Extractor LLM]
+  extractor-->anthropic[Anthropic Claude]
+  worker-->openai[OpenAI embeddings]
+  api-->stripe[Stripe]
+  worker-->hubspot[HubSpot / Pipedrive]
+  worker-->s3[S3 / Google Sheets]
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="ai-models">
+<h2>AI model overview</h2>
+
+<p>Three model roles, each chosen for cost vs. quality fit:</p>
+
+<table>
+<thead><tr>
+  <th>Role</th>
+  <th>Model</th>
+  <th>Why this one</th>
+  <th>Cost shape</th>
+</tr></thead>
+<tbody>
+  <tr>
+    <td><strong>Query parser</strong> (NL → structured search)</td>
+    <td>Claude <strong>Haiku 4.5</strong></td>
+    <td>Fast, cheap, JSON-mode reliable. Escalates to Sonnet only for low-confidence parses.</td>
+    <td>~$0.0001 per query</td>
+  </tr>
+  <tr>
+    <td><strong>Contact extractor</strong> (HTML → email/phone/social)</td>
+    <td>Claude <strong>Haiku 4.5</strong></td>
+    <td>Regex pre-filters most cases; Haiku catches the formatted-image / obfuscated ones.</td>
+    <td>~$0.0003 per page</td>
+  </tr>
+  <tr>
+    <td><strong>Premium escalation</strong> (ambiguous queries)</td>
+    <td>Claude <strong>Sonnet 4.6</strong></td>
+    <td>Triggered when Haiku's confidence &lt; 0.5 AND an entity_type was detected.</td>
+    <td>~$0.003 per escalation</td>
+  </tr>
+  <tr>
+    <td><strong>Ask Mode v1</strong> (NL question → SQL filter)</td>
+    <td>Claude <strong>Haiku 4.5</strong></td>
+    <td>The model only sees the schema + question — never row PII. Whitelisted filter fields.</td>
+    <td>~$0.0001 per question</td>
+  </tr>
+  <tr>
+    <td><strong>Ask Mode v2</strong> (vector similarity)</td>
+    <td>OpenAI <strong>text-embedding-3-small</strong></td>
+    <td>Cheapest dense embedding at 1536 dim with strong B2B relevance. Only non-PII text embedded.</td>
+    <td>$0.02 / 1M tokens (≈ $0.00002 per entity)</td>
+  </tr>
+</tbody>
+</table>
+
+<div class="callout">
+<strong>GDPR & embeddings.</strong> Only the joined string <code>"name | city | country | category"</code> is sent to OpenAI. Email, phone, and address never leave the platform — there's an explicit regression-guard test for this.
+</div>
+
+<h3>Tier escalation logic</h3>
+<div class="mermaid">
+flowchart LR
+  q[Query in] --> rule{Rule parser<br/>matches?}
+  rule -- yes --> done1[ValidatedQuery<br/>conf 0.75, no LLM]
+  rule -- no  --> haiku[Haiku 4.5]
+  haiku --> conf{Confidence<br/>≥ 0.5?}
+  conf -- yes --> done2[ValidatedQuery]
+  conf -- no  --> sonnet[Sonnet 4.6 retry]
+  sonnet --> done3[ValidatedQuery or<br/>fail with hint]
+</div>
+
+<p>Net effect: most queries are zero-LLM (rule-parser fast path), the rest are Haiku, and only ambiguous edge cases hit Sonnet. A typical 100-lead job costs <strong>under $0.05</strong>.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="how-it-works">
+<h2>How lead generation works</h2>
+
+<p>The pipeline is one process composed of named stages. Each stage writes to Postgres so the next stage can resume from any point if a worker crashes or a job is re-tried.</p>
+
+<h3>Stages</h3>
+
+<div class="grid-3">
+  <div class="card"><h4>1. Validate</h4><p>NL query → structured spec. Rule parser first, LLM second, escalate-on-low-confidence third.</p></div>
+  <div class="card"><h4>2. Discover</h4><p>SmartRouter calls adapters in priority order. Cache hit short-circuits the network. Per-domain rate limit honored.</p></div>
+  <div class="card"><h4>3. Crawl</h4><p>Visit homepage + contact + about (multilingual paths). robots.txt enforced. Retry-After cooldown set on 429/503.</p></div>
+  <div class="card"><h4>4. Extract</h4><p>Regex finds the easy emails/phones; Haiku is invoked only for pages where regex came up empty.</p></div>
+  <div class="card"><h4>5. Verify</h4><p>Email syntax + MX (always); Hunter (only top-quality candidates). Phone format + country code. URL liveness.</p></div>
+  <div class="card"><h4>6. Score</h4><p>Quality 0–100 from completeness, freshness, source trust. Threshold below 60 → review queue.</p></div>
+  <div class="card"><h4>7. Dedupe</h4><p>Fuzzy match on normalized name + domain + address. Lower-quality row marked <code>duplicate_of</code>.</p></div>
+  <div class="card"><h4>8. Persist</h4><p>Entity + per-field provenance + RawFetch audit row. PII columns encrypted on the way in.</p></div>
+  <div class="card"><h4>9. Export</h4><p>Signed CSV URL by default; on-demand push to S3 / Sheets / HubSpot / Pipedrive.</p></div>
+</div>
+
+<h3>End-to-end pipeline</h3>
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant API as FastAPI
+  participant Q as Redis (arq)
+  participant W as Worker
+  participant DB as Postgres
+  participant SRC as Sources
+  participant LLM as Anthropic
+  U->>API: POST /jobs {query}
+  API->>DB: INSERT job (status=pending)
+  API->>Q: enqueue run_job(job_id)
+  API-->>U: 202 Accepted {job_id}
+  Q->>W: dequeue
+  W->>LLM: validate(query) → ValidatedQuery
+  W->>DB: UPDATE job (status=running, validated)
+  loop For each source (priority order)
+    W->>SRC: search(spec)
+    SRC-->>W: places[]
+    W->>DB: INSERT raw_fetches (audit)
+  end
+  loop For each place
+    W->>SRC: GET homepage + /contact + /about
+    W->>DB: INSERT raw_fetches per page
+    W->>LLM: extract(html) (only when regex misses)
+    W->>DB: INSERT entity (PII columns encrypted)
+  end
+  W->>DB: dedupe + score
+  W->>DB: UPDATE job (status=succeeded, cost_usd)
+  W-->>U: webhook job.completed (HMAC-signed)
+</div>
+
+<h3>Where money is spent (and capped)</h3>
+<ul>
+  <li><strong>Per-domain rate limit</strong> caps how fast we hammer a small site.</li>
+  <li><strong>Per-tenant + per-job budget cap</strong> — when <code>cost_usd</code> approaches <code>budget_cap_usd</code>, the runner stops enqueuing new fetches and marks the job <code>budget_exceeded</code>.</li>
+  <li><strong>Tiered LLM routing</strong> — Haiku is the default; Sonnet only when Haiku is unsure.</li>
+  <li><strong>Short-lived response cache</strong> — repeat queries within ~1h are served from Redis without an upstream call.</li>
+  <li><strong>Email-pattern cache (Postgres)</strong> — once we know <code>{firstname}.{lastname}@acme.com</code> works for one Acme contact, we don't re-spend on Hunter for the next.</li>
+</ul>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="workflow-overall">
+<h2>Overall system workflow</h2>
+<div class="mermaid">
+flowchart TB
+  start([User enters query]) --> validate{Validates?}
+  validate -- no --> reject[Return error<br/>+ suggestions]
+  validate -- yes --> discover[Discovery<br/>multi-source]
+  discover --> crawl[Crawl websites]
+  crawl --> extract[Extract contacts]
+  extract --> verify[Verify email/phone]
+  verify --> score[Quality score]
+  score --> hi{Score ≥ 60?}
+  hi -- yes --> dedupe[Dedupe]
+  hi -- no --> review[(Review queue)]
+  review --> approve{Operator<br/>approves?}
+  approve -- yes --> dedupe
+  approve -- no --> rejected[Marked rejected]
+  dedupe --> persist[(Postgres)]
+  persist --> webhook[Fire job.completed<br/>webhook]
+  persist --> exports{Operator<br/>exports?}
+  exports --> csv[Signed CSV URL]
+  exports --> s3[S3 bucket]
+  exports --> sheets[Google Sheets]
+  exports --> hubspot[HubSpot]
+  exports --> pipedrive[Pipedrive]
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="workflow-user">
+<h2>SaaS user workflow</h2>
+
+<p>A <strong>SaaS user</strong> is a team member working inside an existing tenant. They were invited by the tenant owner and have access to all of the tenant's jobs, leads, and templates — but cannot manage billing or invite others.</p>
+
+<div class="mermaid">
+flowchart TB
+  open[Open dashboard URL] --> login[Log in with email + password]
+  login --> dashboard[See recent jobs + stats]
+  dashboard --> branch{What today?}
+  branch --> opt_a[Run a discovery query]
+  branch --> opt_b[Upload a CSV for enrichment]
+  branch --> opt_c[Use Ask Mode]
+  branch --> opt_d[Work the review queue]
+  branch --> opt_e[Move leads through the pipeline]
+  opt_a --> sub_a[Type query → submit → watch progress]
+  sub_a --> result_a[Download CSV or push to CRM]
+  opt_b --> sub_b[Drag CSV → name domain rows]
+  sub_b --> result_a
+  opt_c --> sub_c[Type a question]
+  sub_c --> answer[Get matching rows + summary]
+  opt_d --> sub_d[Approve or reject low-confidence rows]
+  opt_e --> sub_e[Mark new → contacted → responded → converted]
+</div>
+
+<h3>What a user can do</h3>
+<table>
+<thead><tr><th>Action</th><th>Endpoint(s)</th></tr></thead>
+<tbody>
+  <tr><td>Submit a discovery job</td><td>POST /jobs</td></tr>
+  <tr><td>Upload a bulk CSV</td><td>POST /jobs/bulk-csv</td></tr>
+  <tr><td>List + view jobs</td><td>GET /jobs, GET /jobs/{id}</td></tr>
+  <tr><td>Download a job's results</td><td>GET /jobs/{id}/export.csv</td></tr>
+  <tr><td>Push results to HubSpot / Pipedrive / S3 / Sheets</td><td>POST /integrations/{provider}/export/{job_id}</td></tr>
+  <tr><td>Work the review queue</td><td>GET /review, POST /review/{id}/{approve,reject}</td></tr>
+  <tr><td>Move leads through the pipeline</td><td>PATCH /leads/{id}</td></tr>
+  <tr><td>Save / load query templates</td><td>POST /templates, GET /templates</td></tr>
+  <tr><td>Ask natural-language questions</td><td>POST /ask, POST /ask/similar</td></tr>
+  <tr><td>View attribution + dashboard</td><td>GET /reports/attribution, GET /dashboard</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="workflow-admin">
+<h2>SaaS admin workflow</h2>
+
+<p>A <strong>SaaS admin</strong> in this system is the <strong>tenant owner</strong> — the user who created the account. Same data scope as a regular user, plus four tenant-management capabilities that regular users don't see.</p>
+
+<div class="mermaid">
+flowchart TB
+  signup[Sign up at /login] --> tenant[Tenant + owner User created<br/>plan=free]
+  tenant --> a{Admin tasks}
+  a --> billing[Upgrade plan via Stripe Checkout]
+  a --> seats[Invite team members]
+  a --> integrations[Connect HubSpot, Pipedrive, S3, Sheets]
+  a --> keys[Issue + rotate API keys]
+  a --> hooks[Configure webhooks]
+  a --> bl[Manage blacklist + opt-outs]
+  billing --> webhook[Stripe webhook<br/>updates tenant.plan]
+  seats --> invite[POST /invites<br/>14-day token]
+  invite --> recipient[Recipient accepts]
+  recipient --> joins[Joins tenant as User]
+</div>
+
+<h3>What a tenant admin can additionally do</h3>
+<table>
+<thead><tr><th>Action</th><th>Endpoint(s)</th></tr></thead>
+<tbody>
+  <tr><td>Upgrade billing plan</td><td>POST /billing/checkout</td></tr>
+  <tr><td>Invite a team member</td><td>POST /invites</td></tr>
+  <tr><td>Revoke an outstanding invite</td><td>DELETE /invites/{id}</td></tr>
+  <tr><td>Connect HubSpot / Pipedrive / S3 / Sheets</td><td>POST /integrations/{provider}/...</td></tr>
+  <tr><td>Issue a programmatic API key</td><td>POST /api-keys</td></tr>
+  <tr><td>Rotate a key (24h grace)</td><td>POST /api-keys/{id}/rotate</td></tr>
+  <tr><td>Configure outbound webhooks</td><td>POST /webhooks</td></tr>
+  <tr><td>Manage tenant blacklist</td><td>POST /blacklist, DELETE /blacklist/{id}</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<strong>Note:</strong> there is no platform-wide "super admin" role. Tenant isolation is enforced at the database query level — every read/write joins through <code>tenant_id</code>, and a foreign tenant's row returns <strong>404, not 403</strong>, so existence isn't even confirmed across tenant boundaries.
+</div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="mockups">
+<h2>UI mockups</h2>
+
+<p>Wireframes of every screen in the dashboard. Each shows the structure, key controls, and sample data — sized to fit the doc, not pixel-perfect renders of production. Every page exists in <code>web/app/</code> and is styled with shadcn/ui + Tailwind in real life.</p>
+
+
+<!-- ═══════ MOCKUP: LOGIN ═══════ -->
+<h3 id="mockup-login">1. Login / Register</h3>
+<p>Single page with a sign-in / sign-up toggle. JWT goes into a session cookie + Authorization header.</p>
+<div class="mockup">
+  <div class="mockup-titlebar">
+    <span class="mockup-dots">● ● ●</span>
+    <span class="mockup-url">app.leadgen.eu/login</span>
+  </div>
+  <div class="mockup-body" style="display:flex;align-items:center;justify-content:center;min-height:380px;background:#f5f6fa;">
+    <div style="background:#fff;padding:32px 28px;border-radius:8px;border:1px solid #e5e7eb;width:340px;">
+      <div style="text-align:center;margin-bottom:18px;">
+        <div style="display:inline-flex;width:40px;height:40px;border-radius:8px;background:#dbeafe;color:#2563eb;align-items:center;justify-content:center;font-weight:700;">L</div>
+        <h2 style="font-size:1.15rem;margin:10px 0 4px;">Welcome back</h2>
+        <p style="font-size:0.8rem;color:#888;margin:0;">Sign in to your AI LeadGen OS account</p>
+      </div>
+      <label class="wf-label">Email</label>
+      <input class="wf-input" placeholder="you@company.eu" style="margin-bottom:10px;">
+      <label class="wf-label">Password</label>
+      <input class="wf-input" type="password" placeholder="••••••••" style="margin-bottom:14px;">
+      <button class="wf-button" style="width:100%;">Sign in</button>
+      <div style="text-align:center;margin-top:14px;font-size:0.78rem;color:#888;">
+        Don't have an account? <a href="#" style="color:#2563eb;">Sign up</a>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">/login — register/login toggle, JWT issued on success, redirects to /</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: DASHBOARD ═══════ -->
+<h3 id="mockup-dashboard">2. Dashboard (jobs list + create)</h3>
+<p>Landing page. Stats strip, new-job form, recent jobs table that auto-refreshes every 2s while a job is running.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links">
+        <span class="active">Dashboard</span>
+        <span>Jobs</span><span>Review</span><span>Leads</span><span>Ask</span><span>Bulk</span><span>API keys</span>
+      </div>
+      <div class="right">mrabbani@combosoft.co.uk · <span class="wf-badge info">Standard</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Dashboard</div>
+      <div class="wf-sub">Submit discovery jobs and track their status, cost, and output.</div>
+
+      <div class="wf-grid-stats">
+        <div class="wf-card"><h5>In flight</h5><div class="wf-stat" style="color:#2563eb;">2</div><div class="wf-stat-label">Live</div></div>
+        <div class="wf-card"><h5>Succeeded</h5><div class="wf-stat">14</div><div class="wf-stat-label">Last 25 jobs</div></div>
+        <div class="wf-card"><h5>Entities</h5><div class="wf-stat">1,283</div><div class="wf-stat-label">Across shown jobs</div></div>
+        <div class="wf-card"><h5>Spend</h5><div class="wf-stat">$3.42</div><div class="wf-stat-label">Across shown jobs</div></div>
+      </div>
+
+      <div class="wf-grid-2">
+        <div class="wf-card">
+          <h5>New discovery job</h5>
+          <p style="font-size:0.78rem;color:#888;margin:0 0 12px;">Natural-language query. We plan, route, and bill within your cap.</p>
+          <label class="wf-label">Query</label>
+          <input class="wf-input" placeholder="restaurants in Paris" style="margin-bottom:10px;">
+          <div class="wf-row" style="margin-bottom:12px;">
+            <div style="flex:1;"><label class="wf-label">Limit</label><input class="wf-input" value="50"></div>
+            <div style="flex:1;"><label class="wf-label">Budget cap (USD)</label><input class="wf-input" value="$5.00"></div>
+          </div>
+          <button class="wf-button">+ Submit job</button>
+          <button class="wf-button ghost" style="margin-left:6px;">💾 Save as template</button>
+        </div>
+        <div class="wf-card">
+          <h5>Reverify aged records</h5>
+          <p style="font-size:0.78rem;color:#888;margin:0 0 8px;">Re-checks rows older than 90 days.</p>
+          <div style="font-size:0.78rem;margin-bottom:8px;color:#16a34a;">Last run: 2h ago — 87 scanned</div>
+          <button class="wf-button ghost">▶ Run now</button>
+        </div>
+      </div>
+
+      <h4 style="margin-top:20px;font-size:0.92rem;">Recent jobs</h4>
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Query</th><th>Status</th><th>Progress</th><th style="text-align:right;">Entities</th><th style="text-align:right;">Cost</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>restaurants in Paris</td><td><span class="wf-badge info">Running</span></td>
+              <td><div class="wf-progress"><div style="width:62%;"></div></div></td>
+              <td style="text-align:right;">62</td><td style="text-align:right;">$0.31</td><td style="color:#888;">just now</td>
+              <td style="text-align:right;"><span style="color:#888;font-size:0.78rem;">View →</span></td></tr>
+            <tr><td>law firms in Amsterdam</td><td><span class="wf-badge success">Succeeded</span></td>
+              <td><div class="wf-progress"><div style="width:100%;background:#16a34a;"></div></div></td>
+              <td style="text-align:right;">94</td><td style="text-align:right;">$0.48</td><td style="color:#888;">12m ago</td>
+              <td style="text-align:right;"><span style="color:#2563eb;font-size:0.78rem;">⬇ CSV</span></td></tr>
+            <tr><td>B2B SaaS in Berlin</td><td><span class="wf-badge success">Succeeded</span></td>
+              <td><div class="wf-progress"><div style="width:100%;background:#16a34a;"></div></div></td>
+              <td style="text-align:right;">147</td><td style="text-align:right;">$0.92</td><td style="color:#888;">1h ago</td>
+              <td style="text-align:right;"><span style="color:#2563eb;font-size:0.78rem;">⬇ CSV</span></td></tr>
+            <tr><td>cafes in Lisbon (vegan)</td><td><span class="wf-badge bad">Failed</span></td>
+              <td><div class="wf-progress"><div style="width:18%;background:#dc2626;"></div></div></td>
+              <td style="text-align:right;">0</td><td style="text-align:right;">$0.04</td><td style="color:#888;">2h ago</td>
+              <td style="text-align:right;"><span style="color:#888;font-size:0.78rem;">View →</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">/ — auto-refreshes every 2s while jobs are running, every 10s when idle</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: NEW JOB ═══════ -->
+<h3 id="mockup-new-job">3. New discovery job — saved templates</h3>
+<p>Operator can save a frequent query as a template and reapply it in one click. Templates are tenant-scoped.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/</span></div>
+  <div class="mockup-body" style="padding:24px;">
+    <div class="wf-card" style="max-width:560px;">
+      <h5>New discovery job</h5>
+      <div style="margin:8px 0 14px;">
+        <div class="wf-stat-label" style="margin-bottom:6px;">SAVED TEMPLATES</div>
+        <span class="wf-badge info" style="margin-right:6px;cursor:pointer;">EU SaaS startups ✕</span>
+        <span class="wf-badge info" style="margin-right:6px;cursor:pointer;">Paris cafes ✕</span>
+        <span class="wf-badge info" style="margin-right:6px;cursor:pointer;">Berlin law firms ✕</span>
+        <span class="wf-badge muted">+ new</span>
+      </div>
+      <label class="wf-label">Query</label>
+      <input class="wf-input" value="B2B SaaS startups in Berlin" style="margin-bottom:12px;">
+      <div class="wf-row" style="margin-bottom:14px;">
+        <div style="flex:1;"><label class="wf-label">Limit</label><input class="wf-input" value="100"></div>
+        <div style="flex:1;"><label class="wf-label">Budget cap (USD)</label><input class="wf-input" value="$5.00"></div>
+      </div>
+      <button class="wf-button">+ Submit job</button>
+      <button class="wf-button ghost" style="margin-left:6px;">💾 Save this as template</button>
+    </div>
+  </div>
+  <div class="mockup-caption">Saved templates appear inline above the form; one click prefills query + limit + budget</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: JOB DETAIL ═══════ -->
+<h3 id="mockup-job-detail">4. Job detail page</h3>
+<p>Per-row results with quality score, freshness badges, contact info, and a per-field provenance hover. Filters by review status; export CSV honors the filter.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/jobs/d4f8b2…</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span class="active">Jobs</span><span>Review</span><span>Leads</span><span>Ask</span></div>
+    </div>
+    <div class="wf-content">
+      <div style="font-size:0.78rem;color:#2563eb;cursor:pointer;margin-bottom:4px;">← Back to dashboard</div>
+      <div class="wf-h1">restaurants in Paris</div>
+      <div class="wf-sub">
+        <span class="wf-badge success">Succeeded</span> · 94 entities · $0.48 spent · finished 12m ago
+        &nbsp;&nbsp;
+        <button class="wf-button" style="margin-left:8px;">⬇ Export CSV</button>
+        <button class="wf-button ghost">⤴ Push to HubSpot</button>
+        <button class="wf-button ghost">⤴ Push to Sheets</button>
+      </div>
+
+      <div class="wf-row" style="margin-bottom:10px;">
+        <input class="wf-input" placeholder="Filter by name, city…" style="max-width:280px;">
+        <span class="wf-badge info">All</span>
+        <span class="wf-badge muted">Approved</span>
+        <span class="wf-badge muted">Review</span>
+        <span class="wf-badge muted">Rejected</span>
+      </div>
+
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>City</th><th style="text-align:right;">Quality</th><th>Freshness</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><strong>Le Potager du Marais</strong><br/><span style="color:#888;font-size:0.75rem;">lepotager-marais.fr</span></td>
+                <td>contact@lepotager-marais.fr</td>
+                <td>+33 1 57 40 98 57</td>
+                <td>Paris</td>
+                <td style="text-align:right;color:#16a34a;font-weight:600;">92</td>
+                <td><span class="wf-badge success">Fresh</span></td>
+                <td><span class="wf-badge info">approved</span></td></tr>
+            <tr><td><strong>Café Ginger</strong><br/><span style="color:#888;font-size:0.75rem;">cafe-ginger.com</span></td>
+                <td>hello@cafe-ginger.com</td>
+                <td>+33 1 42 71 50 92</td>
+                <td>Paris</td>
+                <td style="text-align:right;color:#16a34a;font-weight:600;">87</td>
+                <td><span class="wf-badge success">Fresh</span></td>
+                <td><span class="wf-badge info">approved</span></td></tr>
+            <tr><td><strong>Loving Hut</strong><br/><span style="color:#888;font-size:0.75rem;">lovinghut.fr</span></td>
+                <td><span style="color:#888;">—</span></td>
+                <td>+33 1 80 06 33 21</td>
+                <td>Paris</td>
+                <td style="text-align:right;color:#d97706;font-weight:600;">58</td>
+                <td><span class="wf-badge warn">120 days old</span></td>
+                <td><span class="wf-badge warn">review</span></td></tr>
+            <tr><td><strong>Vegan Folie's</strong><br/><span style="color:#888;font-size:0.75rem;">veganfolies.fr</span></td>
+                <td>info@veganfolies.fr</td>
+                <td><span style="color:#888;">—</span></td>
+                <td>Paris</td>
+                <td style="text-align:right;color:#d97706;font-weight:600;">71</td>
+                <td><span class="wf-badge success">Fresh</span></td>
+                <td><span class="wf-badge info">approved</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="text-align:center;margin-top:10px;color:#888;font-size:0.78rem;">Showing 4 of 94 · <span style="color:#2563eb;">Load more</span></div>
+    </div>
+  </div>
+  <div class="mockup-caption">Hover any field to see {source, fetched_at, confidence}. Freshness badges flag fields older than 90 days.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: REVIEW ═══════ -->
+<h3 id="mockup-review">5. Review queue</h3>
+<p>Cross-job view of low-confidence rows. Filter by job, sort by score ascending, one-click approve/reject.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/review</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span class="active">Review</span><span>Leads</span><span>Ask</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Review queue</div>
+      <div class="wf-sub">Low-confidence rows that need a human eye. Lowest score first.</div>
+
+      <div class="wf-row" style="margin-bottom:10px;">
+        <select class="wf-input" style="max-width:280px;"><option>All jobs</option></select>
+        <span class="wf-badge muted">12 pending</span>
+      </div>
+
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Name</th><th>Domain</th><th>Job</th><th style="text-align:right;">Score</th><th>Why flagged</th><th style="text-align:right;">Actions</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Generic Restaurant</strong></td><td>genericrestaurant.fr</td>
+                <td style="color:#888;font-size:0.75rem;">restaurants in Paris</td>
+                <td style="text-align:right;color:#dc2626;font-weight:600;">38</td>
+                <td><span class="wf-badge bad">No email</span> <span class="wf-badge warn">Stale website</span></td>
+                <td style="text-align:right;">
+                  <button class="wf-button" style="font-size:0.72rem;padding:3px 9px;">✓ Approve</button>
+                  <button class="wf-button danger" style="font-size:0.72rem;padding:3px 9px;">✕ Reject</button></td></tr>
+            <tr><td><strong>Le Café (Closed?)</strong></td><td>lecafe-paris.fr</td>
+                <td style="color:#888;font-size:0.75rem;">cafes in Lisbon</td>
+                <td style="text-align:right;color:#dc2626;font-weight:600;">42</td>
+                <td><span class="wf-badge bad">Wrong city</span></td>
+                <td style="text-align:right;">
+                  <button class="wf-button" style="font-size:0.72rem;padding:3px 9px;">✓ Approve</button>
+                  <button class="wf-button danger" style="font-size:0.72rem;padding:3px 9px;">✕ Reject</button></td></tr>
+            <tr><td><strong>Loving Hut</strong></td><td>lovinghut.fr</td>
+                <td style="color:#888;font-size:0.75rem;">restaurants in Paris</td>
+                <td style="text-align:right;color:#d97706;font-weight:600;">58</td>
+                <td><span class="wf-badge warn">No email</span></td>
+                <td style="text-align:right;">
+                  <button class="wf-button" style="font-size:0.72rem;padding:3px 9px;">✓ Approve</button>
+                  <button class="wf-button danger" style="font-size:0.72rem;padding:3px 9px;">✕ Reject</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Approve folds the row into the next CSV export; reject excludes it permanently from this tenant.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: BULK ═══════ -->
+<h3 id="mockup-bulk">6. Bulk CSV upload</h3>
+<p>Drag a CSV of company names / domains; the pipeline runs enrichment without discovery. Header aliases honored (Name / Company / company_name).</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/bulk</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span>Leads</span><span class="active">Bulk</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Bulk enrichment</div>
+      <div class="wf-sub">Upload up to 500 names or domains. We'll find websites, emails, phones, and quality-score every row.</div>
+
+      <div style="border:2px dashed #d1d5db;background:#fff;border-radius:8px;padding:42px;text-align:center;color:#888;margin-bottom:16px;">
+        <div style="font-size:2rem;margin-bottom:8px;">📁</div>
+        <div style="font-weight:500;color:#444;">Drop your CSV here, or click to browse</div>
+        <div style="font-size:0.78rem;margin-top:6px;">Required column: <code>name</code> or <code>domain</code> (or both)</div>
+      </div>
+
+      <div class="wf-card">
+        <h5>What's in your file</h5>
+        <table class="wf-table">
+          <thead><tr><th>name</th><th>domain</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Acme Bakery</td><td>acme-bakery.example</td><td><span class="wf-badge success">Ready</span></td></tr>
+            <tr><td>Berlin Coffee Roasters</td><td><span style="color:#888;">—</span></td><td><span class="wf-badge info">Will discover domain</span></td></tr>
+            <tr><td><span style="color:#888;">—</span></td><td>artisan-pizza.example</td><td><span class="wf-badge info">Will fetch name</span></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:12px;font-size:0.82rem;color:#888;">3 rows ready · estimated cost $0.06 · ~2 min</div>
+        <button class="wf-button" style="margin-top:10px;">▶ Start enrichment</button>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Empty domains auto-discovered via Google Places; missing names fetched via crawler &lt;title&gt; tag.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: LEADS PIPELINE ═══════ -->
+<h3 id="mockup-leads">7. Leads pipeline</h3>
+<p>Per-entity view with status transitions and notes. The lead status is independent of review_status: review_status is QC, lead_status is sales motion.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/leads</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span class="active">Leads</span><span>Ask</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Leads pipeline</div>
+
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;">
+        <div class="wf-card" style="padding:10px;text-align:center;background:#f9fafb;">
+          <div style="font-size:0.7rem;text-transform:uppercase;color:#888;">New</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#2563eb;">238</div>
+        </div>
+        <div class="wf-card" style="padding:10px;text-align:center;background:#f9fafb;">
+          <div style="font-size:0.7rem;text-transform:uppercase;color:#888;">Contacted</div>
+          <div style="font-size:1.4rem;font-weight:700;">62</div>
+        </div>
+        <div class="wf-card" style="padding:10px;text-align:center;background:#f9fafb;">
+          <div style="font-size:0.7rem;text-transform:uppercase;color:#888;">Responded</div>
+          <div style="font-size:1.4rem;font-weight:700;">14</div>
+        </div>
+        <div class="wf-card" style="padding:10px;text-align:center;background:#dcfce7;">
+          <div style="font-size:0.7rem;text-transform:uppercase;color:#16a34a;">Converted</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#16a34a;">5</div>
+        </div>
+        <div class="wf-card" style="padding:10px;text-align:center;background:#fee2e2;">
+          <div style="font-size:0.7rem;text-transform:uppercase;color:#dc2626;">Lost</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#dc2626;">9</div>
+        </div>
+      </div>
+
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Lead</th><th>Email</th><th>Status</th><th>Notes</th><th>Last change</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Café Ginger</strong></td><td>hello@cafe-ginger.com</td>
+                <td><select class="wf-input" style="padding:3px 6px;font-size:0.75rem;width:auto;"><option>Contacted</option></select></td>
+                <td style="color:#888;font-size:0.78rem;">Sent intro 2026-04-20</td>
+                <td style="color:#888;">2d ago</td></tr>
+            <tr><td><strong>Le Potager du Marais</strong></td><td>contact@lepotager-marais.fr</td>
+                <td><select class="wf-input" style="padding:3px 6px;font-size:0.75rem;width:auto;"><option>Responded</option></select></td>
+                <td style="color:#888;font-size:0.78rem;">Asked for pricing</td>
+                <td style="color:#888;">5h ago</td></tr>
+            <tr><td><strong>Vegan Folie's</strong></td><td>info@veganfolies.fr</td>
+                <td><select class="wf-input" style="padding:3px 6px;font-size:0.75rem;width:auto;"><option>New</option></select></td>
+                <td style="color:#888;">—</td>
+                <td style="color:#888;">just now</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Status changes timestamp lead_status_changed_at — used by the attribution report.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: ASK MODE ═══════ -->
+<h3 id="mockup-ask">8. AI Ask Mode</h3>
+<p>Two modes side-by-side: structured filter (v1, deterministic) and vector similarity (v2, fuzzy). The model never sees row PII — only the question and the schema.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/ask</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span>Leads</span><span class="active">Ask</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">AI Ask Mode</div>
+      <div class="wf-sub">Ask about your leads in plain English. Two modes: filter (precise) and similar (fuzzy).</div>
+
+      <div class="wf-row" style="margin-bottom:8px;">
+        <span class="wf-badge info">Filter</span>
+        <span class="wf-badge muted">Similar</span>
+        <span class="wf-spacer"></span>
+        <span class="wf-stat-label">Powered by Claude Haiku 4.5</span>
+      </div>
+      <input class="wf-input" value="show me Paris restaurants with verified emails I haven't contacted yet" style="margin-bottom:12px;">
+      <button class="wf-button">🔍 Ask</button>
+
+      <div class="wf-card" style="margin-top:16px;background:#f0f7ff;border-color:#bfdbfe;">
+        <div style="font-size:0.78rem;color:#2563eb;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;margin-bottom:6px;">I searched for</div>
+        <div style="font-style:italic;color:#444;">Restaurants in Paris (FR) with email present, lead_status = new — sorted by quality_score desc, limit 25.</div>
+      </div>
+
+      <h4 style="margin-top:18px;font-size:0.92rem;">42 matches</h4>
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Name</th><th>Email</th><th>City</th><th>Status</th><th style="text-align:right;">Score</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Le Potager du Marais</strong></td><td>contact@lepotager-marais.fr</td><td>Paris</td><td><span class="wf-badge info">new</span></td><td style="text-align:right;">92</td></tr>
+            <tr><td><strong>Café Ginger</strong></td><td>hello@cafe-ginger.com</td><td>Paris</td><td><span class="wf-badge info">new</span></td><td style="text-align:right;">87</td></tr>
+            <tr><td><strong>Vegan Folie's</strong></td><td>info@veganfolies.fr</td><td>Paris</td><td><span class="wf-badge info">new</span></td><td style="text-align:right;">71</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Toggle to "Similar" mode for vector RAG: "leads that look like artisanal bakeries" → cosine search.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: OPS DASHBOARD ═══════ -->
+<h3 id="mockup-ops">9. Operator dashboard</h3>
+<p>Real-time health view: queue depth, last-24h source rollup with success rate, top-cost jobs, recent failures. Distinct from the per-job stats on the home page.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/dashboard</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span>Leads</span><span>Ask</span><span class="active">Ops</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Operator dashboard</div>
+      <div class="wf-sub">What's happening on your account right now.</div>
+
+      <h4 style="font-size:0.92rem;">Queue (last 24h)</h4>
+      <div class="wf-grid-stats">
+        <div class="wf-card"><h5>Pending</h5><div class="wf-stat" style="color:#d97706;">3</div></div>
+        <div class="wf-card"><h5>Running</h5><div class="wf-stat" style="color:#2563eb;">2</div></div>
+        <div class="wf-card"><h5>Succeeded 24h</h5><div class="wf-stat" style="color:#16a34a;">28</div></div>
+        <div class="wf-card"><h5>Failed 24h</h5><div class="wf-stat" style="color:#dc2626;">1</div></div>
+      </div>
+
+      <div class="wf-grid-2">
+        <div class="wf-card">
+          <h5>Source health (24h)</h5>
+          <table class="wf-table">
+            <thead><tr><th>Source</th><th style="text-align:right;">Calls</th><th style="text-align:right;">Success</th><th style="text-align:right;">Cost</th></tr></thead>
+            <tbody>
+              <tr><td>google_places</td><td style="text-align:right;">412</td><td style="text-align:right;color:#16a34a;">98%</td><td style="text-align:right;">$1.84</td></tr>
+              <tr><td>website_crawler</td><td style="text-align:right;">1,283</td><td style="text-align:right;color:#16a34a;">94%</td><td style="text-align:right;">$0.00</td></tr>
+              <tr><td>foursquare</td><td style="text-align:right;">87</td><td style="text-align:right;color:#d97706;">82%</td><td style="text-align:right;">$0.00</td></tr>
+              <tr><td>opencorporates</td><td style="text-align:right;">42</td><td style="text-align:right;color:#16a34a;">100%</td><td style="text-align:right;">$0.21</td></tr>
+              <tr><td>hunter</td><td style="text-align:right;">28</td><td style="text-align:right;color:#16a34a;">100%</td><td style="text-align:right;">$0.28</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="wf-card">
+          <h5>Recent failures</h5>
+          <table class="wf-table">
+            <tbody>
+              <tr><td>cafes in Lisbon (vegan)<br/><span style="color:#dc2626;font-size:0.75rem;">Places adapter timeout</span><br/><span style="color:#888;font-size:0.7rem;">2h ago</span></td></tr>
+              <tr><td>law firms in Madrid<br/><span style="color:#dc2626;font-size:0.75rem;">Budget exceeded at $5.00</span><br/><span style="color:#888;font-size:0.7rem;">yesterday</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h4 style="font-size:0.92rem;margin-top:18px;">Top-cost jobs (24h)</h4>
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Query</th><th>Status</th><th style="text-align:right;">Cost</th><th>Created</th></tr></thead>
+          <tbody>
+            <tr><td>B2B SaaS in Berlin</td><td><span class="wf-badge success">Succeeded</span></td><td style="text-align:right;">$0.92</td><td style="color:#888;">1h ago</td></tr>
+            <tr><td>law firms in Amsterdam</td><td><span class="wf-badge success">Succeeded</span></td><td style="text-align:right;">$0.48</td><td style="color:#888;">12m ago</td></tr>
+            <tr><td>restaurants in Paris</td><td><span class="wf-badge info">Running</span></td><td style="text-align:right;">$0.31</td><td style="color:#888;">just now</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">All four sections in one round-trip via FILTER aggregates. Tenant-scoped through Job.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: INTEGRATIONS ═══════ -->
+<h3 id="mockup-integrations">10. Integrations panel</h3>
+<p>Tenant admin connects HubSpot, Pipedrive, S3, Google Sheets. Tokens stored encrypted at rest. Status pill shows last successful export.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/integrations</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span>Leads</span><span>Ask</span><span class="active">Integrations</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Integrations</div>
+      <div class="wf-sub">Where to push your enriched leads. Tokens are encrypted at rest.</div>
+
+      <div class="grid-2">
+        <div class="wf-card">
+          <div class="wf-row" style="margin-bottom:6px;">
+            <strong>🟧 HubSpot</strong>
+            <span class="wf-badge success">Connected</span>
+            <span class="wf-spacer"></span>
+            <span style="color:#888;font-size:0.75rem;">Last export 2h ago</span>
+          </div>
+          <p style="font-size:0.78rem;color:#888;margin:0 0 10px;">Pushes entities as Contacts. Skips rows without an email.</p>
+          <button class="wf-button ghost" style="font-size:0.75rem;">Rotate token</button>
+          <button class="wf-button ghost" style="font-size:0.75rem;">Disconnect</button>
+        </div>
+        <div class="wf-card">
+          <div class="wf-row" style="margin-bottom:6px;">
+            <strong>🟩 Pipedrive</strong>
+            <span class="wf-badge muted">Not connected</span>
+          </div>
+          <p style="font-size:0.78rem;color:#888;margin:0 0 10px;">Pushes entities as Persons. Optional company_domain for the per-account subdomain.</p>
+          <input class="wf-input" placeholder="api_token" style="margin-bottom:6px;">
+          <input class="wf-input" placeholder="company_domain (optional)" style="margin-bottom:6px;">
+          <button class="wf-button" style="font-size:0.75rem;">Connect</button>
+        </div>
+        <div class="wf-card">
+          <div class="wf-row" style="margin-bottom:6px;">
+            <strong>🟦 Google Sheets</strong>
+            <span class="wf-badge success">Connected</span>
+            <span class="wf-spacer"></span>
+            <span style="color:#888;font-size:0.75rem;">SA: exporter@proj.iam.gserviceaccount.com</span>
+          </div>
+          <p style="font-size:0.78rem;color:#888;margin:0 0 8px;">Append-only to a spreadsheet you've shared with the SA.</p>
+          <div style="font-size:0.75rem;color:#888;">Spreadsheet ID: <code>1AbCdEf…</code> · Worksheet: Leads</div>
+        </div>
+        <div class="wf-card">
+          <div class="wf-row" style="margin-bottom:6px;">
+            <strong>🟥 Amazon S3</strong>
+            <span class="wf-badge muted">Not connected</span>
+          </div>
+          <p style="font-size:0.78rem;color:#888;margin:0 0 10px;">On-demand CSV upload to your bucket prefix.</p>
+          <input class="wf-input" placeholder="bucket-name" style="margin-bottom:6px;">
+          <input class="wf-input" placeholder="region (eu-west-1)" style="margin-bottom:6px;">
+          <button class="wf-button" style="font-size:0.75rem;">Connect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Per-job export buttons live on the Job Detail page; this panel is the connect/manage view only.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: API KEYS ═══════ -->
+<h3 id="mockup-api-keys">11. API keys (with rotation)</h3>
+<p>Programmatic credentials. Plaintext shown exactly once at creation. Rotation issues a new key + gives the old one a 24h grace window.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/api-keys</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span>Leads</span><span>Ask</span><span class="active">API keys</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">API keys</div>
+      <div class="wf-sub">Authenticate programmatic callers via <code>X-API-Key</code> header. Plaintext is shown once.</div>
+
+      <div class="wf-row" style="margin-bottom:14px;">
+        <input class="wf-input" placeholder="Name your key (prod-server, ci-runner…)" style="max-width:340px;">
+        <button class="wf-button">+ Create key</button>
+      </div>
+
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Name</th><th>Prefix</th><th>Created</th><th>Last used</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+          <tbody>
+            <tr><td>prod-server</td><td><code>lg_live_a3f9</code></td><td style="color:#888;">2026-03-12</td><td style="color:#888;">8m ago</td>
+                <td><span class="wf-badge success">Active</span></td>
+                <td style="text-align:right;">
+                  <button class="wf-button ghost" style="font-size:0.72rem;padding:3px 9px;">↻ Rotate</button>
+                  <button class="wf-button danger" style="font-size:0.72rem;padding:3px 9px;">Revoke</button></td></tr>
+            <tr><td>prod-server (old)</td><td><code>lg_live_b21c</code></td><td style="color:#888;">2026-03-12</td><td style="color:#888;">2h ago</td>
+                <td><span class="wf-badge warn">Expires in 23h</span></td>
+                <td style="text-align:right;">
+                  <button class="wf-button danger" style="font-size:0.72rem;padding:3px 9px;">Revoke now</button></td></tr>
+            <tr><td>ci-runner</td><td><code>lg_live_c5e2</code></td><td style="color:#888;">2026-02-28</td><td style="color:#888;">never</td>
+                <td><span class="wf-badge bad">Revoked</span></td>
+                <td style="text-align:right;color:#888;font-size:0.78rem;">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout" style="margin-top:16px;">
+        <strong>How rotation works:</strong> a new key is issued; the old one is auto-revoked in 24 hours. Both work during the overlap so deployed callers can swap config without downtime.
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Key hashes only are stored — losing a plaintext key means revoking and replacing it.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: BLACKLIST ═══════ -->
+<h3 id="mockup-blacklist">12. Blacklist (GDPR opt-outs + manual)</h3>
+<p>Permanent skip-list per tenant. Auto-populated by /privacy/opt-out fan-out; admin can also add manually.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/blacklist</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span>Leads</span><span>Ask</span><span class="active">Blacklist</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Blacklist</div>
+      <div class="wf-sub">Domains and emails this tenant must never contact. Permanent — checked on every entity write.</div>
+
+      <div class="wf-row" style="margin-bottom:14px;">
+        <input class="wf-input" placeholder="email or domain" style="max-width:280px;">
+        <input class="wf-input" placeholder="reason (optional)" style="max-width:240px;">
+        <button class="wf-button">Add</button>
+      </div>
+
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Identifier</th><th>Reason</th><th>Source</th><th>Added</th><th style="text-align:right;"></th></tr></thead>
+          <tbody>
+            <tr><td>privacy@example.com</td><td>GDPR erasure request</td><td><span class="wf-badge bad">Public opt-out</span></td><td style="color:#888;">2026-03-08</td>
+                <td style="text-align:right;color:#888;font-size:0.75rem;">cannot remove</td></tr>
+            <tr><td>spammy-domain.example</td><td>Bounced 100% on last batch</td><td><span class="wf-badge muted">Manual</span></td><td style="color:#888;">2026-03-15</td>
+                <td style="text-align:right;"><button class="wf-button ghost" style="font-size:0.72rem;padding:3px 8px;">Remove</button></td></tr>
+            <tr><td>former-customer@bigco.com</td><td>Asked to be removed via email</td><td><span class="wf-badge muted">Manual</span></td><td style="color:#888;">2026-04-02</td>
+                <td style="text-align:right;"><button class="wf-button ghost" style="font-size:0.72rem;padding:3px 8px;">Remove</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn" style="margin-top:14px;">
+        <strong>Public opt-outs cannot be removed.</strong> A row added via <code>POST /privacy/opt-out</code> represents a GDPR Article 17 request and is permanent (compliance.md §5).
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Public opt-outs fan out to every tenant currently holding the subject's data.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: PRICING ═══════ -->
+<h3 id="mockup-pricing">13. Pricing (public)</h3>
+<p>Marketing page at /pricing. Two tiers, Stripe Checkout on the upgrade button.</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">leadgen.eu/pricing</span></div>
+  <div class="mockup-body" style="background:#fff;">
+    <div style="text-align:center;padding:32px 20px 8px;">
+      <h2 style="font-size:1.5rem;margin:0 0 6px;border:none;">Simple, predictable pricing</h2>
+      <p style="color:#888;font-size:0.92rem;">Pay only for what you generate. EU/UK data residency.</p>
+    </div>
+    <div class="grid-2" style="max-width:680px;margin:16px auto 32px;padding:0 20px;">
+      <div class="wf-card" style="text-align:center;padding:24px;">
+        <div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:#888;font-weight:600;">Free</div>
+        <div style="font-size:2rem;font-weight:700;margin:8px 0;">$0<span style="font-size:0.9rem;color:#888;">/mo</span></div>
+        <div style="color:#888;font-size:0.85rem;margin-bottom:18px;">Try the full pipeline.</div>
+        <ul style="text-align:left;padding-left:20px;font-size:0.85rem;color:#444;line-height:1.8;">
+          <li>50 leads / month</li>
+          <li>1 user</li>
+          <li>CSV export</li>
+          <li>HubSpot connector</li>
+        </ul>
+        <button class="wf-button ghost" style="width:100%;margin-top:12px;">Current plan</button>
+      </div>
+      <div class="wf-card" style="text-align:center;padding:24px;border-color:#2563eb;border-width:2px;position:relative;">
+        <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#2563eb;color:#fff;font-size:0.7rem;padding:2px 10px;border-radius:10px;font-weight:600;">RECOMMENDED</div>
+        <div style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:#2563eb;font-weight:600;">Standard</div>
+        <div style="font-size:2rem;font-weight:700;margin:8px 0;">$99<span style="font-size:0.9rem;color:#888;">/mo</span></div>
+        <div style="color:#888;font-size:0.85rem;margin-bottom:18px;">For active outreach teams.</div>
+        <ul style="text-align:left;padding-left:20px;font-size:0.85rem;color:#444;line-height:1.8;">
+          <li>2,500 leads / month</li>
+          <li>5 user seats</li>
+          <li>All export destinations</li>
+          <li>All CRM connectors</li>
+          <li>Webhooks + API keys</li>
+          <li>AI Ask Mode</li>
+          <li>Priority support</li>
+        </ul>
+        <button class="wf-button" style="width:100%;margin-top:12px;">Upgrade →</button>
+      </div>
+    </div>
+    <div style="text-align:center;color:#888;font-size:0.78rem;padding-bottom:24px;">
+      All plans include GDPR opt-out, audit log, encrypted PII at rest, robots.txt enforcement.
+    </div>
+  </div>
+  <div class="mockup-caption">Public route — no auth required. Upgrade button POSTs to /billing/checkout → Stripe.</div>
+</div>
+
+
+<!-- ═══════ MOCKUP: BILLING ═══════ -->
+<h3 id="mockup-billing">14. Billing & team seats (admin)</h3>
+<p>Tenant owner manages plan + seats. Plan transitions update on Stripe webhook (active → past_due → canceled).</p>
+<div class="mockup">
+  <div class="mockup-titlebar"><span class="mockup-dots">● ● ●</span><span class="mockup-url">app.leadgen.eu/billing</span></div>
+  <div class="mockup-body">
+    <div class="wf-nav">
+      <span class="wf-logo">⚡ LeadGen OS</span>
+      <div class="wf-nav-links"><span>Dashboard</span><span>Jobs</span><span>Review</span><span>Leads</span><span>Ask</span><span class="active">Billing</span></div>
+    </div>
+    <div class="wf-content">
+      <div class="wf-h1">Billing & team</div>
+
+      <div class="grid-2">
+        <div class="wf-card">
+          <h5>Current plan</h5>
+          <div style="font-size:1.5rem;font-weight:700;margin:6px 0;">Standard <span class="wf-badge success">Active</span></div>
+          <div style="color:#888;font-size:0.82rem;margin-bottom:10px;">$99/mo · renews 2026-05-08 · 5 seats</div>
+          <button class="wf-button ghost">Manage in Stripe portal</button>
+          <button class="wf-button ghost">Cancel plan</button>
+        </div>
+        <div class="wf-card">
+          <h5>Usage this month</h5>
+          <div style="font-size:0.85rem;margin-bottom:6px;color:#444;">847 / 2,500 leads</div>
+          <div class="wf-progress" style="margin-bottom:12px;"><div style="width:34%;"></div></div>
+          <div style="font-size:0.85rem;margin-bottom:6px;color:#444;">3 / 5 seats used</div>
+          <div class="wf-progress"><div style="width:60%;"></div></div>
+        </div>
+      </div>
+
+      <h4 style="margin-top:18px;font-size:0.92rem;">Team members</h4>
+      <div class="wf-card" style="padding:0;">
+        <table class="wf-table">
+          <thead><tr><th>Email</th><th>Role</th><th>Joined</th><th style="text-align:right;"></th></tr></thead>
+          <tbody>
+            <tr><td>mrabbani@combosoft.co.uk <span class="wf-badge info">you</span></td><td>Admin (owner)</td><td style="color:#888;">2026-01-04</td><td></td></tr>
+            <tr><td>sales@combosoft.co.uk</td><td>User</td><td style="color:#888;">2026-02-12</td><td style="text-align:right;"><button class="wf-button ghost" style="font-size:0.72rem;padding:3px 8px;">Remove</button></td></tr>
+            <tr><td>analyst@combosoft.co.uk</td><td>User</td><td style="color:#888;">2026-03-22</td><td style="text-align:right;"><button class="wf-button ghost" style="font-size:0.72rem;padding:3px 8px;">Remove</button></td></tr>
+            <tr><td>contractor@combosoft.co.uk</td><td colspan="2"><span class="wf-badge warn">Invite pending</span> — expires in 9 days</td><td style="text-align:right;"><button class="wf-button ghost" style="font-size:0.72rem;padding:3px 8px;">Resend</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="wf-row" style="margin-top:12px;">
+        <input class="wf-input" placeholder="invite-email@company.com" style="max-width:280px;">
+        <button class="wf-button">Send invite</button>
+      </div>
+    </div>
+  </div>
+  <div class="mockup-caption">Stripe webhook updates tenant.plan; the portal handles card changes + cancellation.</div>
+</div>
+
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="closing" style="margin-top:48px;text-align:center;color:var(--fg-faint);font-size:0.85rem;border-top:1px solid var(--border);padding-top:24px;">
+  <p>AI LeadGen OS · built by Combosoft Ltd · documentation generated 2026-04-23</p>
+  <p>Every page mockup has a corresponding implementation under <code>web/app/</code>; every API mentioned is in <code>app/api/</code>.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeVariables: {
+      primaryColor: '#dbeafe',
+      primaryTextColor: '#1e3a8a',
+      primaryBorderColor: '#2563eb',
+      lineColor: '#94a3b8',
+      fontFamily: 'inherit'
+    },
+    flowchart: { curve: 'basis', padding: 12 }
+  });
+</script>
+
+</body>
+</html>
