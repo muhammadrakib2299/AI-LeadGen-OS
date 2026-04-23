@@ -455,6 +455,17 @@ class ApiKey(Base, UUIDPKMixin, TimestampMixin):
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Hard expiry — the auth check rejects keys past this time. Set by
+    # `POST /api-keys/{id}/rotate` to give the old key a short overlap
+    # window so callers can swap to the new one without downtime. Null
+    # means no expiry.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set on the OLD key when rotated. Lets the UI/API show "this key was
+    # superseded by <id>" rather than just disappearing.
+    rotated_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("api_keys.id", ondelete="SET NULL"),
+    )
 
 
 class Blacklist(Base, UUIDPKMixin, TimestampMixin):

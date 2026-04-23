@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -200,3 +200,130 @@ async def test_api_key_updates_last_used_at(
     assert resp.status_code == 200
     await db_session.refresh(row)
     assert row.last_used_at is not None
+
+
+
+@pytest.mark.asyncio
+async def test_rotate_returns_new_plaintext_and_grace_window(
+    db_session: AsyncSession,
+    override_session,
+    persisted_user: User,
+) -> None:
+    plaintext_old, prefix, key_hash = generate_api_key()
+    old = ApiKey(
+        user_id=persisted_user.id,
+        name="prod",
+        prefix=prefix,
+        key_hash=key_hash,
+    )
+    db_session.add(old)
+    await db_session.flush()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(f"/api-keys/{old.id}/rotate")
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["key"].startswith("lg_live_")
+    assert body["key"] != plaintext_old
+    assert body["name"] == "prod"
+    assert body["expires_at"] is None  # the NEW key has no expiry
+
+    await db_session.refresh(old)
+    assert old.expires_at is not None
+    # ~24h grace, give or take execution time
+    delta = old.expires_at - datetime.now(UTC)
+    assert timedelta(hours=23, minutes=55) < delta <= timedelta(hours=24)
+    assert str(old.rotated_to_id) == body["id"]
+
+
+@pytest.mark.asyncio
+async def test_rotate_unknown_key_is_404(
+    db_session: AsyncSession, override_session, persisted_user: User
+) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(f"/api-keys/{uuid4()}/rotate")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rotate_revoked_key_is_409(
+    db_session: AsyncSession, override_session, persisted_user: User
+) -> None:
+    _, prefix, key_hash = generate_api_key()
+    revoked = ApiKey(
+        user_id=persisted_user.id,
+        name="dead",
+        prefix=prefix,
+        key_hash=key_hash,
+        revoked_at=datetime.now(UTC),
+    )
+    db_session.add(revoked)
+    await db_session.flush()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(f"/api-keys/{revoked.id}/rotate")
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_rotate_already_rotated_key_is_409(
+    db_session: AsyncSession, override_session, persisted_user: User
+) -> None:
+    _, prefix, key_hash = generate_api_key()
+    old = ApiKey(
+        user_id=persisted_user.id,
+        name="prod",
+        prefix=prefix,
+        key_hash=key_hash,
+    )
+    db_session.add(old)
+    await db_session.flush()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post(f"/api-keys/{old.id}/rotate")
+        assert first.status_code == 201
+        second = await client.post(f"/api-keys/{old.id}/rotate")
+    assert second.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_old_key_works_during_grace_then_rejected_after(
+    db_session: AsyncSession,
+    override_session,
+    persisted_user: User,
+    no_auth_override,
+) -> None:
+    plaintext_old, prefix, key_hash = generate_api_key()
+    old = ApiKey(
+        user_id=persisted_user.id,
+        name="prod",
+        prefix=prefix,
+        key_hash=key_hash,
+        # Already past expiry: simulates "grace window has lapsed".
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    db_session.add(old)
+    await db_session.flush()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/jobs", headers={"X-API-Key": plaintext_old})
+    assert resp.status_code == 401
+
+    # Same key, expiry pushed into the future — should authenticate again.
+    old.expires_at = datetime.now(UTC) + timedelta(hours=1)
+    await db_session.flush()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/jobs", headers={"X-API-Key": plaintext_old})
+    assert resp.status_code == 200

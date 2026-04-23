@@ -36,6 +36,10 @@ async def _user_from_api_key(plaintext: str, db: AsyncSession) -> User | None:
     ).scalar_one_or_none()
     if row is None or row.revoked_at is not None:
         return None
+    # Hard expiry — set when the key was rotated. The rotation endpoint
+    # gives the old key a 24h grace, then this check kicks in.
+    if row.expires_at is not None and row.expires_at <= datetime.now(UTC):
+        return None
     row.last_used_at = datetime.now(UTC)
     await db.flush()
     user = (await db.execute(select(User).where(User.id == row.user_id))).scalar_one_or_none()
