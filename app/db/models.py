@@ -32,6 +32,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
 from app.db.types import EncryptedString
 
+# Must match the dim in alembic migration a6d2f8b1e094 AND the embeddings
+# provider in app/services/embeddings.py. OpenAI text-embedding-3-small.
+# Lives outside the ORM (added by migration only) so a SELECT * doesn't
+# pull 1536 floats per row and so test environments without the pgvector
+# extension installed still work — only /ask/similar and the backfill
+# script touch the column, both via textual SQL.
+ENTITY_EMBEDDING_DIM = 1536
+
 
 class Source(Base, UUIDPKMixin, TimestampMixin):
     """Registry of data sources we're allowed to query. Seeded from sources.md."""
@@ -144,6 +152,10 @@ class Entity(Base, UUIDPKMixin, TimestampMixin):
 
     # External IDs across sources (e.g. {"google_place_id": "ChIJ...", "opencorporates_id": "..."})
     external_ids: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+    # NOTE: `entities.embedding vector(1536)` is added by migration
+    # a6d2f8b1e094 but is intentionally NOT mapped on this class. See
+    # the ENTITY_EMBEDDING_DIM comment above.
 
     job: Mapped[Job] = relationship(back_populates="entities")
 

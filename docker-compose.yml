@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector-bundled image. Keeps pgcrypto + uuid-ossp + pg_trgm we
+    # already use, adds the vector type for AI Ask Mode v2.
+    image: pgvector/pgvector:pg16
     container_name: leadgen-postgres
     restart: unless-stopped
     environment:
