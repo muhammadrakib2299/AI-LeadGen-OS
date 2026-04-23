@@ -13,6 +13,7 @@ from app.api import (
     auth,
     billing,
     blacklist,
+    dashboard,
     health,
     integrations,
     invites,
@@ -92,6 +93,7 @@ app.include_router(leads.router, dependencies=_auth)
 app.include_router(reports.router, dependencies=_auth)
 app.include_router(invites.router, dependencies=_auth)
 app.include_router(ask.router, dependencies=_auth)
+app.include_router(dashboard.router, dependencies=_auth)
 # Public part of invites lives on /auth — the bearer of the token IS auth.
 app.include_router(invites.auth_router)
 # api_keys and billing use get_current_user inside each handler; billing's
