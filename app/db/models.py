@@ -339,6 +339,27 @@ class HubspotIntegration(Base, UUIDPKMixin, TimestampMixin):
     last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PipedriveIntegration(Base, UUIDPKMixin, TimestampMixin):
+    """Per-tenant Pipedrive personal API token.
+
+    `company_domain` is the tenant's Pipedrive subdomain (e.g. "acme" for
+    acme.pipedrive.com). Optional: when absent we fall back to the global
+    api.pipedrive.com host.
+    """
+
+    __tablename__ = "pipedrive_integrations"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    api_token: Mapped[str] = mapped_column(EncryptedString(1024), nullable=False)
+    company_domain: Mapped[str | None] = mapped_column(String(128))
+    last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Webhook(Base, UUIDPKMixin, TimestampMixin):
     """Outbound webhook endpoint configured by a tenant.
 

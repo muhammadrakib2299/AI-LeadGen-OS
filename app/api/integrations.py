@@ -19,10 +19,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.logging import get_logger
-from app.db.models import Entity, HubspotIntegration, Job, S3ExportDestination, User
+from app.db.models import (
+    Entity,
+    HubspotIntegration,
+    Job,
+    PipedriveIntegration,
+    S3ExportDestination,
+    User,
+)
 from app.db.session import get_session
 from app.services.export import entities_to_csv
 from app.services.hubspot import export_contacts
+from app.services.pipedrive import export_persons
 from app.services.s3_export import put_object
 
 log = get_logger(__name__)
@@ -315,3 +323,145 @@ async def export_job_to_s3(
         s3_uri=result.s3_uri,
     )
     return S3UploadResponse(s3_uri=result.s3_uri, row_count=len(entities))
+
+
+# ── Pipedrive ─────────────────────────────────────────────────────────
+
+
+class PipedriveTokenRequest(BaseModel):
+    api_token: str = Field(min_length=10, max_length=1024)
+    company_domain: str | None = Field(default=None, max_length=128)
+
+
+class PipedriveStatusResponse(BaseModel):
+    connected: bool
+    company_domain: str | None = None
+    last_export_at: datetime | None = None
+
+
+async def _get_pipedrive_integration(
+    db: AsyncSession, tenant_id: UUID
+) -> PipedriveIntegration | None:
+    return (
+        await db.execute(
+            select(PipedriveIntegration).where(
+                PipedriveIntegration.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
+
+
+@router.post("/pipedrive/token", response_model=PipedriveStatusResponse)
+async def set_pipedrive_token(
+    body: PipedriveTokenRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> PipedriveStatusResponse:
+    existing = await _get_pipedrive_integration(db, current_user.tenant_id)
+    if existing:
+        existing.api_token = body.api_token
+        existing.company_domain = body.company_domain
+    else:
+        db.add(
+            PipedriveIntegration(
+                tenant_id=current_user.tenant_id,
+                api_token=body.api_token,
+                company_domain=body.company_domain,
+            )
+        )
+    await db.commit()
+    integration = await _get_pipedrive_integration(db, current_user.tenant_id)
+    assert integration is not None
+    log.info("pipedrive_token_stored", tenant_id=str(current_user.tenant_id))
+    return PipedriveStatusResponse(
+        connected=True,
+        company_domain=integration.company_domain,
+        last_export_at=integration.last_export_at,
+    )
+
+
+@router.get("/pipedrive", response_model=PipedriveStatusResponse)
+async def get_pipedrive_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> PipedriveStatusResponse:
+    integration = await _get_pipedrive_integration(db, current_user.tenant_id)
+    if integration is None:
+        return PipedriveStatusResponse(connected=False)
+    return PipedriveStatusResponse(
+        connected=True,
+        company_domain=integration.company_domain,
+        last_export_at=integration.last_export_at,
+    )
+
+
+@router.delete("/pipedrive", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_pipedrive(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> None:
+    integration = await _get_pipedrive_integration(db, current_user.tenant_id)
+    if integration is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="not connected"
+        )
+    await db.delete(integration)
+    await db.commit()
+
+
+@router.post(
+    "/pipedrive/export/{job_id}",
+    response_model=ExportResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def export_job_to_pipedrive(
+    job_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> ExportResponse:
+    integration = await _get_pipedrive_integration(db, current_user.tenant_id)
+    if integration is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pipedrive is not connected for this tenant. POST a token first.",
+        )
+    job = (
+        await db.execute(
+            select(Job).where(
+                Job.id == job_id, Job.tenant_id == current_user.tenant_id
+            )
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="job not found"
+        )
+
+    entities = (
+        await db.execute(
+            select(Entity).where(
+                Entity.job_id == job.id,
+                Entity.duplicate_of.is_(None),
+                Entity.review_status.not_in(("rejected", "duplicate")),
+            )
+        )
+    ).scalars().all()
+
+    result = await export_persons(
+        integration.api_token,
+        list(entities),
+        company_domain=integration.company_domain,
+    )
+    integration.last_export_at = datetime.now(UTC)
+    await db.commit()
+    log.info(
+        "pipedrive_export_done",
+        tenant_id=str(current_user.tenant_id),
+        job_id=str(job_id),
+        attempted=result.attempted,
+        created=result.created,
+        errors=len(result.errors),
+    )
+    return ExportResponse(
+        attempted=result.attempted, created=result.created, errors=result.errors
+    )
