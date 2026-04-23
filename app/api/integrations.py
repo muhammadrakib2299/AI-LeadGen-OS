@@ -21,6 +21,7 @@ from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.models import (
     Entity,
+    GoogleSheetsDestination,
     HubspotIntegration,
     Job,
     PipedriveIntegration,
@@ -29,6 +30,7 @@ from app.db.models import (
 )
 from app.db.session import get_session
 from app.services.export import entities_to_csv
+from app.services.google_sheets import append_entities, parse_service_account
 from app.services.hubspot import export_contacts
 from app.services.pipedrive import export_persons
 from app.services.s3_export import put_object
@@ -464,4 +466,191 @@ async def export_job_to_pipedrive(
     )
     return ExportResponse(
         attempted=result.attempted, created=result.created, errors=result.errors
+    )
+
+
+# ── Google Sheets ─────────────────────────────────────────────────────
+
+
+class GoogleSheetsConfigRequest(BaseModel):
+    service_account_json: str = Field(min_length=20, max_length=8192)
+    spreadsheet_id: str = Field(min_length=10, max_length=128)
+    worksheet_name: str = Field(default="Leads", min_length=1, max_length=128)
+
+
+class GoogleSheetsStatusResponse(BaseModel):
+    connected: bool
+    spreadsheet_id: str | None = None
+    worksheet_name: str | None = None
+    service_account_email: str | None = None
+    last_export_at: datetime | None = None
+
+
+class GoogleSheetsAppendResponse(BaseModel):
+    appended: int
+    errors: list[str]
+
+
+async def _get_sheets_destination(
+    db: AsyncSession, tenant_id: UUID
+) -> GoogleSheetsDestination | None:
+    return (
+        await db.execute(
+            select(GoogleSheetsDestination).where(
+                GoogleSheetsDestination.tenant_id == tenant_id
+            )
+        )
+    ).scalar_one_or_none()
+
+
+def _sa_email(blob: str) -> str | None:
+    """Extract client_email from a stored SA JSON blob, or None on parse error.
+
+    Used only to surface the email in status responses so the operator
+    knows which account to share their Sheet with.
+    """
+    try:
+        return parse_service_account(blob).get("client_email")
+    except ValueError:
+        return None
+
+
+@router.post("/google-sheets", response_model=GoogleSheetsStatusResponse)
+async def set_sheets_destination(
+    body: GoogleSheetsConfigRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> GoogleSheetsStatusResponse:
+    # Validate the SA JSON shape up front so the user gets a 400 with a
+    # clear reason instead of a 500 at the first export.
+    try:
+        parse_service_account(body.service_account_json)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    existing = await _get_sheets_destination(db, current_user.tenant_id)
+    if existing:
+        existing.service_account_json = body.service_account_json
+        existing.spreadsheet_id = body.spreadsheet_id
+        existing.worksheet_name = body.worksheet_name
+    else:
+        db.add(
+            GoogleSheetsDestination(
+                tenant_id=current_user.tenant_id,
+                service_account_json=body.service_account_json,
+                spreadsheet_id=body.spreadsheet_id,
+                worksheet_name=body.worksheet_name,
+            )
+        )
+    await db.commit()
+    dest = await _get_sheets_destination(db, current_user.tenant_id)
+    assert dest is not None
+    log.info(
+        "google_sheets_destination_set",
+        tenant_id=str(current_user.tenant_id),
+        spreadsheet_id=dest.spreadsheet_id,
+    )
+    return GoogleSheetsStatusResponse(
+        connected=True,
+        spreadsheet_id=dest.spreadsheet_id,
+        worksheet_name=dest.worksheet_name,
+        service_account_email=_sa_email(dest.service_account_json),
+        last_export_at=dest.last_export_at,
+    )
+
+
+@router.get("/google-sheets", response_model=GoogleSheetsStatusResponse)
+async def get_sheets_destination(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> GoogleSheetsStatusResponse:
+    dest = await _get_sheets_destination(db, current_user.tenant_id)
+    if dest is None:
+        return GoogleSheetsStatusResponse(connected=False)
+    return GoogleSheetsStatusResponse(
+        connected=True,
+        spreadsheet_id=dest.spreadsheet_id,
+        worksheet_name=dest.worksheet_name,
+        service_account_email=_sa_email(dest.service_account_json),
+        last_export_at=dest.last_export_at,
+    )
+
+
+@router.delete("/google-sheets", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_sheets(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> None:
+    dest = await _get_sheets_destination(db, current_user.tenant_id)
+    if dest is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="not connected"
+        )
+    await db.delete(dest)
+    await db.commit()
+
+
+@router.post(
+    "/google-sheets/export/{job_id}",
+    response_model=GoogleSheetsAppendResponse,
+)
+async def export_job_to_sheets(
+    job_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> GoogleSheetsAppendResponse:
+    dest = await _get_sheets_destination(db, current_user.tenant_id)
+    if dest is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Sheets destination is not connected. POST credentials first.",
+        )
+    job = (
+        await db.execute(
+            select(Job).where(
+                Job.id == job_id, Job.tenant_id == current_user.tenant_id
+            )
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="job not found"
+        )
+
+    entities = (
+        await db.execute(
+            select(Entity).where(
+                Entity.job_id == job.id,
+                Entity.duplicate_of.is_(None),
+                Entity.review_status.not_in(("rejected", "duplicate")),
+            )
+        )
+    ).scalars().all()
+
+    # Send the header row only the first time we export to this destination
+    # — after that, append-only semantics mean repeat headers would litter
+    # the sheet.
+    include_header = dest.last_export_at is None
+    result = await append_entities(
+        dest.service_account_json,
+        dest.spreadsheet_id,
+        dest.worksheet_name,
+        list(entities),
+        include_header=include_header,
+    )
+    if not result.errors:
+        dest.last_export_at = datetime.now(UTC)
+        await db.commit()
+    log.info(
+        "google_sheets_export_done",
+        tenant_id=str(current_user.tenant_id),
+        job_id=str(job_id),
+        spreadsheet_id=dest.spreadsheet_id,
+        appended=result.appended,
+        errors=len(result.errors),
+    )
+    return GoogleSheetsAppendResponse(
+        appended=result.appended, errors=result.errors
     )

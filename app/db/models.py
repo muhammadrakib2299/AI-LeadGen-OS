@@ -292,6 +292,33 @@ class S3ExportDestination(Base, UUIDPKMixin, TimestampMixin):
     last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class GoogleSheetsDestination(Base, UUIDPKMixin, TimestampMixin):
+    """Tenant's Google Sheets destination for on-demand exports.
+
+    `service_account_json` is the full SA key blob (encrypted at rest).
+    The tenant must share the target spreadsheet with the service account's
+    client_email before exports work — there's no way to bootstrap that
+    from our side.
+    """
+
+    __tablename__ = "google_sheets_destinations"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    service_account_json: Mapped[str] = mapped_column(
+        EncryptedString(8192), nullable=False
+    )
+    spreadsheet_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    worksheet_name: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="Leads"
+    )
+    last_export_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class TenantInvite(Base, UUIDPKMixin, TimestampMixin):
     """Outstanding invitation for someone to join a tenant.
 
