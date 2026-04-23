@@ -20,7 +20,7 @@ def test_opt_out_accepts_valid_email() -> None:
         "/privacy/opt-out",
         json={"email": "contact@example.com", "reason": "GDPR erasure"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 202
     assert response.json()["status"] == "accepted"
 
 

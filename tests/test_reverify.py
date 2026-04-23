@@ -21,6 +21,9 @@ async def _seed_job(session: AsyncSession) -> Job:
     return job
 
 
+_DOMAIN_COUNTER = [0]
+
+
 async def _seed_entity(
     session: AsyncSession,
     job: Job,
@@ -30,16 +33,24 @@ async def _seed_entity(
     website: str | None = None,
     phone: str | None = None,
     country: str | None = "GB",
+    field_sources: dict | None = None,
 ) -> Entity:
+    # Each entity gets a unique domain — the (job_id, domain) unique
+    # constraint would otherwise reject a second seed on the same job.
+    _DOMAIN_COUNTER[0] += 1
+    domain = f"stale-{_DOMAIN_COUNTER[0]}.example"
     e = Entity(
         job_id=job.id,
         name="Stale Co",
-        domain="stale.example",
+        domain=domain,
         website=website,
         email=email,
         phone=phone,
         country=country,
-        field_sources={},
+        # Pass field_sources at insert time. Mutating it after with a
+        # subsequent flush would trigger TimestampMixin's onupdate=now()
+        # and silently un-stale the row.
+        field_sources=field_sources or {},
         updated_at=updated_at,
     )
     session.add(e)
@@ -68,16 +79,15 @@ async def test_reverify_flags_dead_website(db_session: AsyncSession) -> None:
         job,
         updated_at=stale,
         website="https://dead.example",
+        field_sources={
+            "website": {
+                "source": "google_places",
+                "fetched_at": "2025-01-01T00:00:00+00:00",
+                "confidence": 0.99,
+                "liveness": {"status": "alive", "http_status": 200},
+            }
+        },
     )
-    entity.field_sources = {
-        "website": {
-            "source": "google_places",
-            "fetched_at": "2025-01-01T00:00:00+00:00",
-            "confidence": 0.99,
-            "liveness": {"status": "alive", "http_status": 200},
-        }
-    }
-    await db_session.flush()
 
     respx.head("https://dead.example").mock(return_value=httpx.Response(404))
 
@@ -106,17 +116,19 @@ async def test_reverify_repeated_runs_dont_compound_confidence(
     job = await _seed_job(db_session)
     stale = datetime.now(UTC) - timedelta(days=120)
     entity = await _seed_entity(
-        db_session, job, updated_at=stale, website="https://alive.example"
+        db_session,
+        job,
+        updated_at=stale,
+        website="https://alive.example",
+        field_sources={
+            "website": {
+                "source": "google_places",
+                "fetched_at": "2025-01-01T00:00:00+00:00",
+                "confidence": 0.99,
+                "liveness": {"status": "alive", "http_status": 200},
+            }
+        },
     )
-    entity.field_sources = {
-        "website": {
-            "source": "google_places",
-            "fetched_at": "2025-01-01T00:00:00+00:00",
-            "confidence": 0.99,
-            "liveness": {"status": "alive", "http_status": 200},
-        }
-    }
-    await db_session.flush()
 
     respx.head("https://alive.example").mock(return_value=httpx.Response(200))
 
@@ -139,17 +151,19 @@ async def test_reverify_handles_bad_email(db_session: AsyncSession) -> None:
     job = await _seed_job(db_session)
     stale = datetime.now(UTC) - timedelta(days=120)
     entity = await _seed_entity(
-        db_session, job, updated_at=stale, email="not-an-email"
+        db_session,
+        job,
+        updated_at=stale,
+        email="not-an-email",
+        field_sources={
+            "email": {
+                "source": "crawler",
+                "fetched_at": "2025-01-01T00:00:00+00:00",
+                "confidence": 0.9,
+                "verification": {"status": "valid", "mx_host": "mx.example"},
+            }
+        },
     )
-    entity.field_sources = {
-        "email": {
-            "source": "crawler",
-            "fetched_at": "2025-01-01T00:00:00+00:00",
-            "confidence": 0.9,
-            "verification": {"status": "valid", "mx_host": "mx.example"},
-        }
-    }
-    await db_session.flush()
 
     async with httpx.AsyncClient() as http:
         result = await reverify_stale_entities(
